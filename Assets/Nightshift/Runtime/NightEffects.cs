@@ -1,38 +1,85 @@
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Nightshift
 {
     public sealed class NightParticles
     {
-        readonly ParticleSystem particles;
+        readonly ParticleSystem particles, smoke;
+        readonly Transform exhaustMount;
+        readonly Transform[] jets = new Transform[3];
+        readonly Material flame;
+        float smokeTimer;
         readonly Color[] colors = { new Color(.30f,.85f,1),new Color(1,.15f,.28f),new Color(1,.66f,.23f),new Color(.55f,.33f,1) };
 
-        public NightParticles(Transform parent, NightMaterials materials)
+        public NightParticles(Transform parent, NightMaterials materials, Transform exhaustMount)
         {
-            var obj = new GameObject("Pooled VFX particles"); obj.transform.SetParent(parent,false);
-            particles = obj.AddComponent<ParticleSystem>(); particles.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
-            var main = particles.main; main.playOnAwake = false; main.loop = true; main.maxParticles = 700;
+            this.exhaustMount = exhaustMount;
+            particles = MakeSystem(parent, "Pooled VFX particles", materials.Fire, 700);
+            var smokeMaterial = new Material(materials.Fire);
+            smokeMaterial.SetFloat("_Mode", 2);
+            smokeMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            smoke = MakeSystem(parent, "Exhaust smoke", smokeMaterial, 55);
+            var growth = smoke.sizeOverLifetime; growth.enabled = true;
+            growth.size = new ParticleSystem.MinMaxCurve(2.8f, AnimationCurve.EaseInOut(0, .36f, 1, 1));
+
+            flame = new Material(Shader.Find("Nightshift/Exhaust Flame"));
+            for (int i = 0; i < jets.Length; i++)
+            {
+                var jet = new GameObject("Exhaust flame").transform;
+                jet.SetParent(exhaustMount, false);
+                jet.localPosition = new Vector3((i - 1) * .109f, i == 1 ? .426f : .42f, i == 1 ? -2.28f : -2.21f);
+                jet.localRotation = Quaternion.Euler(-90, 0, 0);
+                for (int side = 0; side < 2; side++)
+                {
+                    var sheet = NightMaterials.Primitive(jet, PrimitiveType.Quad, "Flame sheet", Vector3.up * .5f, Vector3.one, flame);
+                    sheet.localRotation = Quaternion.Euler(0, side * 90, 0);
+                    var renderer = sheet.GetComponent<MeshRenderer>();
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
+                jet.gameObject.SetActive(false);
+                jets[i] = jet;
+            }
+        }
+
+        static ParticleSystem MakeSystem(Transform parent, string name, Material material, int capacity)
+        {
+            var obj = new GameObject(name); obj.transform.SetParent(parent,false);
+            var system = obj.AddComponent<ParticleSystem>();
+            system.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = system.main; main.playOnAwake = false; main.loop = true; main.maxParticles = capacity;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            var emission = particles.emission; emission.enabled = false;
-            var shape = particles.shape; shape.enabled = false;
-            var color = particles.colorOverLifetime; color.enabled = true;
+            var emission = system.emission; emission.enabled = false;
+            var shape = system.shape; shape.enabled = false;
+            var color = system.colorOverLifetime; color.enabled = true;
             var gradient = new Gradient();
             gradient.SetKeys(new[] { new GradientColorKey(Color.white,0),new GradientColorKey(Color.white,1) },
                 new[] { new GradientAlphaKey(.95f,0),new GradientAlphaKey(.76f,.18f),new GradientAlphaKey(0,1) });
             color.color = new ParticleSystem.MinMaxGradient(gradient);
             var renderer = obj.GetComponent<ParticleSystemRenderer>();
-            renderer.sharedMaterial = materials.Fire;
+            renderer.sharedMaterial = material;
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            particles.Play();
+            system.Play();
+            return system;
         }
 
         public void SetPaused(bool paused)
         {
-            if (paused) particles.Pause(); else particles.Play();
+            if (paused) { particles.Pause(); smoke.Pause(); HideJets(); }
+            else { particles.Play(); smoke.Play(); }
         }
 
-        public void Clear() => particles.Clear();
+        void HideJets()
+        {
+            foreach (var jet in jets) jet.gameObject.SetActive(false);
+        }
+
+        public void Clear()
+        {
+            particles.Clear(); smoke.Clear(); smokeTimer = 0; HideJets();
+        }
 
         void Burst(Vector3 at, Color color, int count, float speed, float lifetime, float size, Vector3 drift)
         {
@@ -50,12 +97,36 @@ namespace Nightshift
             }
         }
 
-        public void Exhaust(Vector3 at,bool throttle)
+        public void Exhaust(float dt, float time, float speed, bool boosting)
         {
-            foreach (int side in Signs.Values)
-                Burst(at + new Vector3(side*.35f,0,0),throttle ? new Color(1,.31f,.11f) : new Color(.42f,.52f,.66f,.35f),
-                    3,1.6f,.43f,throttle ? .21f : .33f,new Vector3(0,.47f,-5));
+            flame.SetFloat("_Clock", time);
+            for (int i = 0; i < jets.Length; i++)
+            {
+                var jet = jets[i];
+                jet.gameObject.SetActive(boosting);
+                float flicker = .5f + .5f * Mathf.Sin(time * 50 + i * 1.8f) * Mathf.Cos(time * 29 + i * .7f);
+                jet.localScale = new Vector3(.18f + flicker * .06f, .69f + flicker * .77f, .18f + flicker * .06f);
+            }
+
+            smokeTimer -= dt;
+            if (smokeTimer > 0) return;
+            smokeTimer = boosting ? .09f : .057f;
+            foreach (var jet in jets)
+            {
+                var puff = new ParticleSystem.EmitParams
+                {
+                    position = jet.position,
+                    velocity = -exhaustMount.forward * (2.6f + speed * .28f) + Vector3.up * .46f
+                        + exhaustMount.right * UnityEngine.Random.Range(-.31f,.31f),
+                    startColor = new Color(.62f,.69f,.77f,boosting ? .31f : .46f),
+                    startLifetime = UnityEngine.Random.Range(.34f,.57f),
+                    startSize = .47f,
+                    rotation = UnityEngine.Random.Range(0,360)
+                };
+                smoke.Emit(puff,1);
+            }
         }
+
         public void Crash(Vector3 at) => Burst(at,new Color(1,.48f,.13f),58,13,1.17f,.16f,new Vector3(0,1.3f,-6));
         public void Pickup(Vector3 at,bool fuel) =>
             Burst(at,fuel ? new Color(.51f,1,.25f) : new Color(1,.72f,.19f),31,4.8f,.68f,.30f,new Vector3(0,1.8f,-5));

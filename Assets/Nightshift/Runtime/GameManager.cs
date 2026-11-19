@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering.PostProcessing;
@@ -24,7 +25,7 @@ namespace Nightshift
         public bool Muted { get; private set; }
 
         const string RecordKey = "nightshift-best";
-        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, fireAt, combustAt;
+        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, fireAt;
         double nextTraffic, nextCoin, nextFuel;
         int lane, record, spawnIndex;
         bool boosting, braking;
@@ -36,7 +37,9 @@ namespace Nightshift
         Camera chase;
         InputActionMap driving, menus;
         InputAction throttle, brake;
-        ObjectPool<TrafficObstacle> parked, moving;
+        ObjectPool<TrafficObstacle> cruising, moving;
+        readonly List<TrafficObstacle> trafficOrder = new List<TrafficObstacle>(25);
+        readonly TrafficObstacle[] laneLeaders = new TrafficObstacle[3];
         ObjectPool<CoinPickup> coins;
         ObjectPool<FuelPickup> fuels;
 
@@ -58,11 +61,11 @@ namespace Nightshift
             chase = SetupScene(art);
             highway = new Highway(transform, art);
             driver = new DriverRig(transform, art, true, 0);
-            parked = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(art, i, false), item => !item.Active);
+            cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(art, i, false), item => !item.Active);
             moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(art, i + 2, true), item => !item.Active);
             coins = new ObjectPool<CoinPickup>(24, i => new CoinPickup(art.Coin(transform)), item => !item.Active);
             fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(art.Can(transform)), item => !item.Active);
-            effects = new NightParticles(transform, art);
+            effects = new NightParticles(transform, art, driver.ExhaustMount);
             audioRig = new NightAudio(transform);
             CreateActions();
             hud = new GameHud(this);
@@ -72,7 +75,7 @@ namespace Nightshift
 
         TrafficObstacle NewTraffic(NightMaterials art, int i, bool driving) =>
             driving ? (TrafficObstacle)new MovingTraffic(new DriverRig(transform, art, false, i + 1))
-                    : new ParkedTraffic(new DriverRig(transform, art, false, i + 1));
+                    : new CruisingTraffic(new DriverRig(transform, art, false, i + 1));
 
         Camera SetupScene(NightMaterials art)
         {
@@ -200,14 +203,14 @@ namespace Nightshift
             Distance = 0; x = 0; lane = 0; lateral = 0; Speed = 35.55f; elapsed = 0; score = 0;
             Lives = 3; Fuel = 100; hitTime = 0; toast = 0; cameraX = 0; cameraY = 0;
             nextTraffic = 163; nextCoin = 201; nextFuel = 515;
-            spawnIndex = 0; fireAt = 7; combustAt = 0; boosting = false; braking = false;
-            foreach (var item in parked.Items) item.Release();
+            spawnIndex = 0; fireAt = 7; boosting = false; braking = false;
+            foreach (var item in cruising.Items) item.Release();
             foreach (var item in moving.Items) item.Release();
             foreach (var item in coins.Items) item.Release();
             foreach (var item in fuels.Items) item.Release();
             effects.Clear();
             moving.Take().Spawn(98, -1, 19);
-            parked.Take().Spawn(136, 1);
+            cruising.Take().Spawn(136, 1, 17);
             for (int i = 0; i < 3; i++) coins.Take().Spawn(73 + i * 6, 0);
             highway.Update(Distance);
             Position(0);
@@ -230,6 +233,7 @@ namespace Nightshift
             for (int i = 0; i < steps && State == GameState.Playing; i++) Simulate(dt / steps);
             highway.Update(Distance);
             Position(dt);
+            if (State == GameState.Playing) effects.Exhaust(dt, elapsed, Speed, boosting && !braking);
             audioRig.Tick(Speed, State == GameState.Playing, boosting);
             hud.Tick();
         }
@@ -254,11 +258,6 @@ namespace Nightshift
             SpawnRows();
             UpdateItems(dt, old, oldX, true);
             if (State != GameState.Playing) return;
-            if (elapsed >= combustAt)
-            {
-                combustAt = elapsed + .055f;
-                effects.Exhaust(new Vector3(Route.Center(Distance) + x, Route.Height(Distance) + .28f, -2.1f), boosting);
-            }
             if (elapsed > fireAt && Zone != 1)
             {
                 fireAt = elapsed + 12 + Route.Noise(spawnIndex) * 7;
@@ -283,7 +282,7 @@ namespace Nightshift
             {
                 double at = nextCoin;
                 int l = LaneAt(at);
-                bool blocked = Array.Exists(parked.Items, item => item.Active && item.Lane == l && Math.Abs(item.Distance - at) < 25);
+                bool blocked = TrafficNear(at, l, 12);
                 if (!blocked) for (int i = 0; i < 3; i++) coins.Take()?.Spawn(at + 6 * i, l);
                 nextCoin += 145 + 30 * Route.Noise(at + 1);
             }
@@ -291,7 +290,7 @@ namespace Nightshift
             {
                 double at = nextFuel;
                 int l = LaneAt(at + 22);
-                if (Array.Exists(parked.Items, item => item.Active && item.Lane == l && Math.Abs(item.Distance - at) < 10))
+                if (TrafficNear(at, l, 10))
                     l = l == 1 ? -1 : l + 1;
                 fuels.Take()?.Spawn(at, l);
                 nextFuel += 535 + 70 * Route.Noise(at);
@@ -299,37 +298,72 @@ namespace Nightshift
         }
 
         static int LaneAt(double seed) => Mathf.Min(2, (int)(Route.Noise(seed) * 3)) - 1;
+        bool TrafficNear(double at, int lane, double gap)
+        {
+            return TrafficNear(cruising.Items, at, lane, gap) || TrafficNear(moving.Items, at, lane, gap);
+        }
+
+        static bool TrafficNear(TrafficObstacle[] cars, double at, int lane, double gap)
+        {
+            foreach (var car in cars)
+                if (car.Active && car.Lane == lane && Math.Abs(car.Distance - at) < gap) return true;
+            return false;
+        }
+
         void NewObstacle(double at, int targetLane, int i)
         {
-            if (i % 4 == 0) parked.Take()?.Spawn(at, targetLane);
-            else moving.Take()?.Spawn(at, targetLane, 15 + Route.Noise(i + 8) * 12);
+            if (TrafficNear(at, targetLane, TrafficObstacle.MinimumGap + 5)) return;
+            var pool = i % 4 == 0 ? cruising : moving;
+            pool.Take()?.Spawn(at, targetLane, 15 + Route.Noise(i + 8) * 12);
         }
 
         void UpdateItems(float dt, double old, float oldX, bool collide)
         {
-            TickItems(parked.Items, dt, old, oldX, collide);
-            TickItems(moving.Items, dt, old, oldX, collide);
-            TickItems(coins.Items, dt, old, oldX, collide);
-            TickItems(fuels.Items, dt, old, oldX, collide);
+            trafficOrder.Clear();
+            foreach (var car in cruising.Items) if (car.Active) trafficOrder.Add(car);
+            foreach (var car in moving.Items) if (car.Active) trafficOrder.Add(car);
+            trafficOrder.Sort((a, b) => b.Distance.CompareTo(a.Distance));
+            Array.Clear(laneLeaders, 0, laneLeaders.Length);
+            foreach (var car in trafficOrder)
+            {
+                int index = car.Lane + 1;
+                car.Follow(dt, Distance, laneLeaders[index]);
+                if (car.Active) laneLeaders[index] = car;
+            }
+            if (collide)
+            {
+                foreach (var car in trafficOrder)
+                {
+                    double before = car.PreviousDistance - old;
+                    double after = car.Distance - Distance;
+                    CheckContact(car, before, after, oldX);
+                    if (car.Active && State == GameState.Playing && !car.Passed && before >= 0 && after < 0)
+                    {
+                        car.Passed = true; score += 32;
+                    }
+                }
+            }
+            TickPickups(coins.Items, dt, old, oldX, collide);
+            TickPickups(fuels.Items, dt, old, oldX, collide);
         }
 
-        void TickItems<T>(T[] items, float dt, double old, float oldX, bool collide) where T : Interactable
+        void TickPickups<T>(T[] items, float dt, double old, float oldX, bool collide) where T : Interactable
         {
             foreach (var item in items)
             {
                 if (!item.Active) continue;
                 double before = item.Distance - old;
                 item.Tick(dt, Distance);
-                double after = item.Distance - Distance;
-                if (!collide || !item.Active || State != GameState.Playing) continue;
-                bool hit = Math.Abs(after) <= item.Length || (before > item.Length && after < -item.Length);
-                if (hit && Mathf.Abs((oldX + x) * .5f - item.Lane * Route.Lane) < item.Width)
-                    item.Contact(this);
-                if (item.Active && item is TrafficObstacle traffic && !traffic.Passed && before >= 0 && after < 0)
-                {
-                    traffic.Passed = true; score += 32;
-                }
+                if (collide) CheckContact(item, before, item.Distance - Distance, oldX);
             }
+        }
+
+        void CheckContact(Interactable item, double before, double after, float oldX)
+        {
+            if (!item.Active || State != GameState.Playing) return;
+            bool hit = Math.Abs(after) <= item.Length || (before > item.Length && after < -item.Length);
+            if (hit && Mathf.Abs((oldX + x) * .5f - item.Lane * Route.Lane) < item.Width)
+                item.Contact(this);
         }
 
         void Position(float dt)
@@ -433,27 +467,44 @@ namespace Nightshift
 
     public abstract class TrafficObstacle : Interactable
     {
+        public const float MinimumGap = 8.5f;
         readonly DriverRig rig;
+        float cruise;
+        public double PreviousDistance { get; private set; }
         public bool Passed;
         protected TrafficObstacle(DriverRig rig) : base(rig.Root) { this.rig = rig; }
         protected override float Height => .034f;
         public override float Length => 3.97f;
         public override float Width => 1.77f;
-        public override void Tick(float dt, double player)
+        public void Follow(float dt, double player, TrafficObstacle leader)
         {
-            base.Tick(dt, player);
+            PreviousDistance = Distance;
+            if (dt > 0)
+            {
+                float target = cruise;
+                if (leader != null)
+                {
+                    float desiredGap = MinimumGap + Velocity * .42f;
+                    float space = (float)(leader.PreviousDistance - Distance) - desiredGap;
+                    target = Mathf.Min(target, leader.Velocity + Mathf.Max(0, space) * .7f);
+                }
+                Velocity = Mathf.Lerp(Velocity, target, 1 - Mathf.Exp(-(target < Velocity ? 6 : 1.75f) * dt));
+                if (leader != null)
+                    Velocity = Mathf.Min(Velocity, Mathf.Max(0, (float)(leader.Distance - Distance - MinimumGap) / dt));
+            }
+            Tick(dt, player);
             if (Active) rig.Drive(Velocity, 0, false, false, dt);
         }
         public override void Spawn(double distance, int lane, float velocity = 0)
         {
-            base.Spawn(distance, lane, velocity); Passed = false;
+            cruise = velocity; base.Spawn(distance, lane, velocity); Passed = false;
         }
         public override void Contact(GameManager game) { game.Impact(); Release(); }
     }
-    public sealed class ParkedTraffic : TrafficObstacle
+    public sealed class CruisingTraffic : TrafficObstacle
     {
-        public ParkedTraffic(DriverRig rig) : base(rig) { }
-        public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, 0);
+        public CruisingTraffic(DriverRig rig) : base(rig) { }
+        public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, Mathf.Clamp(velocity, 15, 19));
     }
     public sealed class MovingTraffic : TrafficObstacle
     {

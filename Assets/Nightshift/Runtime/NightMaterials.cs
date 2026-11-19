@@ -155,6 +155,7 @@ namespace Nightshift
     public sealed class DriverRig
     {
         public Transform Root { get; }
+        public Transform ExhaustMount => shell;
         readonly Transform shell;
         readonly List<Transform> wheels = new List<Transform>(4);
         readonly Material tail, glow, tailLight;
