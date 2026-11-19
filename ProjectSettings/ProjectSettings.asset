@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 26
+  companyName: Nightshift
+  productName: Nightshift - Infinite Highway
+  bundleVersion: 1.0.0
+  defaultScreenWidth: 1600
+  defaultScreenHeight: 900
+  defaultScreenWidthWeb: 1280
+  defaultScreenHeightWeb: 720
+  m_ActiveColorSpace: 1
+  runInBackground: 0
+  resizableWindow: 1
+  fullscreenMode: 3
+  usePlayerLog: 1
+  applicationIdentifier:
+    Standalone: com.nightshift.infinitehighway
+  activeInputHandler: 1
