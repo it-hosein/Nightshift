@@ -6,7 +6,6 @@ namespace Nightshift
     public sealed class SkyFireworks
     {
         readonly Shell[] shells;
-        readonly float[] searchOffsets = { 0, -32, 32 };
         float next;
         int sequence;
 
@@ -34,27 +33,21 @@ namespace Nightshift
             bool open = Open(distance);
             if (time >= next && open && Open(distance + speed * 2.4f))
             {
-                float lead = Mathf.Max(230, 165 + speed * 1.65f);
-                foreach (float extra in searchOffsets)
+                float lead = Mathf.Max(495, 380 + speed * 2.7f);
+                int index = sequence++;
+                int side = index % 2 == 0 ? 1 : -1;
+                for (int i = 0; i < shells.Length; i++)
                 {
-                    double at = distance + lead + extra;
-                    if (!Open(at) || !Open(at + 23)) continue;
-                    int index = sequence++;
-                    int side = index % 2 == 0 ? 1 : -1;
-                    for (int i = 0; i < shells.Length; i++)
-                    {
-                        double launch = at + i * 23;
-                        int direction = i == 0 ? side : -side;
-                        float offset = 24 + Route.Noise(index * 14 + i + 72) * 7;
-                        float floor = Route.Height(launch);
-                        float start = floor + Mathf.Max(3, Route.Land(launch, offset, direction) + 3);
-                        float peak = floor + (i == 0 ? 45 : 40);
-                        shells[i].Prepare(launch, Route.Center(launch) + offset * direction,
-                            start, peak, time + i * .66f, (index * 2 + i) % 4);
-                    }
-                    next = time + 13 + Route.Noise(index + 296) * 5.4f;
-                    break;
+                    double launch = distance + lead + i * 38;
+                    int direction = i == 0 ? side : -side;
+                    float offset = 46 + Route.Noise(index * 14 + i + 72) * 16;
+                    float floor = Route.Height(launch);
+                    float start = floor + Mathf.Max(3, Route.Land(launch, offset, direction) + 3);
+                    float peak = floor + (i == 0 ? 102 : 88);
+                    shells[i].Prepare(launch, Route.Center(launch) + offset * direction,
+                        start, peak, time + i * .66f, (index * 2 + i) % 4);
                 }
+                next = time + 9.5f + Route.Noise(index + 296) * 4;
             }
             foreach (var shell in shells) shell.Draw(time, distance, open);
         }
@@ -64,6 +57,7 @@ namespace Nightshift
             const int Stars = 160, TrailSteps = 4, Quads = Stars + 1;
             const int TrailVertices = Stars * TrailSteps * 2;
             const float Flight = 1.12f, GoldenAngle = 2.39996323f;
+            const float MinimumDistance = 355, FullBrightnessDistance = 465;
             static readonly Color[] Main =
             {
                 new Color(1,.74f,.34f).linear, new Color(1,.42f,.47f).linear,
@@ -155,7 +149,7 @@ namespace Nightshift
                     {
                         Velocity = new Vector3(Mathf.Cos(angle) * ring, y, Mathf.Sin(angle) * ring) * speed,
                         Tint = i % 6 == 0 || !outer ? Secondary[seed] : Main[seed],
-                        Life = 1.52f + Route.Noise(sample + 1) * .98f,
+                        Life = 1.10f + Route.Noise(sample + 1) * .56f,
                         Phase = Route.Noise(sample + 2) * 7
                     };
                 }
@@ -164,15 +158,17 @@ namespace Nightshift
             public void Draw(float now, double distance, bool open)
             {
                 float age = now - time;
-                bool visible = open && age >= 0 && age <= Flight + 2.55f;
+                float ahead = (float)(at - distance);
+                bool visible = open && age >= 0 && age <= Flight + 1.7f && ahead > MinimumDistance;
                 root.gameObject.SetActive(visible);
                 if (!visible) return;
-                root.localPosition = new Vector3(x, peak, (float)(at - distance));
+                float visibility = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(MinimumDistance, FullBrightnessDistance, ahead));
+                root.localPosition = new Vector3(x, peak, ahead);
                 int quads, vertices;
-                if (age < Flight) Ascend(age, out quads, out vertices);
+                if (age < Flight) Ascend(age, visibility, out quads, out vertices);
                 else
                 {
-                    Burst(age - Flight);
+                    Burst(age - Flight, visibility);
                     quads = Quads; vertices = TrailVertices;
                 }
                 points.vertices = pointVertices; points.colors = pointColors; points.uv2 = pointData;
@@ -193,36 +189,36 @@ namespace Nightshift
 
             float Height(float age) => (start - peak) * Mathf.Pow(1 - Mathf.Clamp01(age / Flight), 1.6f);
 
-            void Ascend(float age, out int quads, out int vertices)
+            void Ascend(float age, float visibility, out int quads, out int vertices)
             {
                 const int steps = 16;
                 var amber = new Color(1,.59f,.19f);
-                PutPoint(0, Vector3.up * Height(age), 1.7f, 4.6f, amber);
+                PutPoint(0, Vector3.up * Height(age), 2.3f, 4.6f * visibility, amber);
                 for (int i = 0; i < steps; i++)
                 {
-                    PutTrail(i*2, Vector3.up * Height(age - i*.024f), amber, 3 * (1 - i / (float)steps));
-                    PutTrail(i*2+1, Vector3.up * Height(age - (i+1)*.024f), amber, 3 * (1 - (i+1) / (float)steps));
+                    PutTrail(i*2, Vector3.up * Height(age - i*.024f), amber, 3 * visibility * (1 - i / (float)steps));
+                    PutTrail(i*2+1, Vector3.up * Height(age - (i+1)*.024f), amber, 3 * visibility * (1 - (i+1) / (float)steps));
                 }
                 quads = 1; vertices = steps * 2;
             }
 
-            void Burst(float age)
+            void Burst(float age, float visibility)
             {
                 for (int i = 0; i <= TrailSteps; i++)
                 {
                     float t = Mathf.Max(0, age - i * .083f);
                     expansion[i] = 1.28f * (1 - Mathf.Exp(-t / 1.28f));
-                    gravity[i] = -3.25f * t * t;
+                    gravity[i] = -1.35f * t * t;
                 }
                 PutPoint(Stars, Vector3.zero, 12 + 22 * age,
-                    age < .26f ? 3.0f * Mathf.Exp(-age * 18) : 0, flashColor);
+                    age < .26f ? 3.0f * Mathf.Exp(-age * 18) * visibility : 0, flashColor);
                 for (int i = 0; i < Stars; i++)
                 {
                     Star star = stars[i];
                     float remaining = Mathf.Clamp01(1 - age / star.Life);
-                    float strength = 5.8f * Mathf.Pow(remaining, 1.33f) * (.78f + .22f * Mathf.Sin(age * 30 + star.Phase));
+                    float strength = 5.8f * Mathf.Pow(remaining, 1.48f) * (.78f + .22f * Mathf.Sin(age * 30 + star.Phase)) * visibility;
                     Vector3 from = Position(star.Velocity, 0);
-                    PutPoint(i, from, 1.65f, strength, star.Tint);
+                    PutPoint(i, from, 2.25f, strength, star.Tint);
                     for (int step = 0; step < TrailSteps; step++)
                     {
                         Vector3 to = Position(star.Velocity, step + 1);
