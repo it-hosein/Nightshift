@@ -9,7 +9,7 @@ namespace Nightshift.EditorTools
     {
         enum Platform { Windows64, Linux64 }
 
-        [SerializeField] string firstName = "", lastName = "", studentId = "", repository = "";
+        [SerializeField] string firstName = "", lastName = "", studentId = "", repository = "https://github.com/it-hosein/Nightshift";
         [SerializeField] Platform platform;
 
         [MenuItem("Nightshift/Build Assignment ZIP…")]

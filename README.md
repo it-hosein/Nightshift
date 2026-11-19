@@ -27,29 +27,24 @@
 3. برای نصب Input System و Post Processing در اولین Import به اینترنت نیاز است. پس از Import از **Nightshift → Open Game Scene** استفاده کنید و دکمهٔ **Play** را بزنید.
 4. برای نمایش موارد ارزیابی، **Course mode** را در منوی اصلی روشن کنید و **Start Drive** را بزنید.
 
-## قرار دادن سورس در GitHub
+## دریافت سورس از GitHub
 
-فایل تاریخچهٔ Git را از لینک پایین دریافت کنید. در حساب خودتان یک مخزن خالی بسازید. اگر مخزن خصوصی است، دسترسی استاد یا دستیار درس را قبل از ارسال بررسی کنید.
+پوشهٔ اصلی مخزن پروژهٔ Unity است. پس از Push در GitHub از **Code → Download ZIP** یا **Open with GitHub Desktop** استفاده کنید. [مخزن Nightshift](https://github.com/it-hosein/Nightshift)
 
 </div>
 
 ```sh
-git clone --branch main nightshift-unity.bundle Nightshift-Unity
-cd Nightshift-Unity
-git remote set-url origin https://github.com/USERNAME/nightshift-hw2.git
-git push -u origin main
+git clone https://github.com/it-hosein/Nightshift.git
 ```
 
 <div dir="rtl" lang="fa">
 
-`USERNAME` و نام مخزن را با مقادیر واقعی جایگزین کنید. پوشهٔ `Nightshift-Unity` هم پروژهٔ کامل Unity است و مستقیم در Hub باز می‌شود. بعد از اولین Import می‌توانید فایل‌های `.meta` و تنظیمات تولیدشدهٔ لازم را هم Commit کنید. `.gitignore` به‌طور خودکار پوشه‌های `Library`، `Temp`، `Builds` و موارد حجیم تولیدی را کنار می‌گذارد.
-
-[دانلود تاریخچهٔ Git پروژه](https://nightshift-highway-hw2.eagerheron21.chatgpt.site/nightshift-unity.bundle)
+پوشهٔ `Nightshift` دانلودشده را در Unity Hub باز کنید. بعد از اولین Import، فایل‌های `.meta` و تنظیمات لازمِ تولیدشده را هم در Git ثبت کنید. `.gitignore` پوشه‌های `Library`، `Temp` و `Builds` را کنار می‌گذارد.
 
 ## ساخت ZIP نهایی طبق PDF تمرین
 
 1. از حالت Play خارج شوید. برای خروجی Windows، پشتیبانی Windows Build Support را در Unity Hub داشته باشید. منوی **Nightshift → Build Assignment ZIP…** را باز کنید.
-2. نام و نام خانوادگی لاتین، شمارهٔ دانشجویی، URL مخزن واقعی GitHub و پلتفرم مقصد را وارد کنید. **Build and save ZIP** را بزنید و پوشهٔ مقصد را انتخاب کنید.
+2. نام و نام خانوادگی لاتین، شمارهٔ دانشجویی و پلتفرم مقصد را وارد کنید. URL مخزن GitHub از قبل درج شده است. **Build and save ZIP** را بزنید و پوشهٔ مقصد را انتخاب کنید.
 3. Unity نام فایل را با الگوی `GD_Hw2_[firstName]_[lastName]_[StudentId].zip` می‌سازد. داخل ZIP لینک GitHub در `Repository.txt`، گزارش در `Report.pdf` و فایل اجرایی همراه تمام وابستگی‌هایش در `Build/` است.
 4. ZIP نهایی را در سامانهٔ درس بارگذاری کنید و طبق PDF، فایل ارسال‌شده را دوباره دانلود و سالم‌بودن آن را بررسی کنید. پیش از ارسال می‌توانید کل `Build/` را Extract کنید و `Nightshift.exe` را اجرا کنید.
 
