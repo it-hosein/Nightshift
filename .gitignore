@@ -75,3 +75,6 @@ crashlytics-build.properties
 /node_modules/
 /dist/
 /Nightshift.html
+
+# Generated coursework submission archives
+/GD_Hw2_*.zip

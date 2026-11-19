@@ -55,7 +55,7 @@ namespace Nightshift.EditorTools
         [MenuItem("Nightshift/Build WebGL")]
         public static void Web() => Build(BuildTarget.WebGL, "Builds/WebGL");
 
-        static void Build(BuildTarget target, string path)
+        internal static void Build(BuildTarget target, string path)
         {
             if (!BuildPipeline.IsBuildTargetSupported(BuildPipeline.GetBuildTargetGroup(target), target))
                 throw new InvalidOperationException("Install the matching Build Support module in Unity Hub.");
