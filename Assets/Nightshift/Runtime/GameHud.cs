@@ -7,7 +7,7 @@ namespace Nightshift
 {
     public sealed class GameHud
     {
-        static readonly Color Accent = new Color(.67f,.98f,.41f);
+        static readonly Color Accent = new Color(.73f,.80f,.60f);
         static readonly Color Type = new Color(.93f,.96f,1);
         static readonly Color Muted = new Color(.71f,.79f,.87f);
         static readonly Color Tile = new Color(.032f,.056f,.083f,.85f);
@@ -16,8 +16,9 @@ namespace Nightshift
         readonly Canvas canvas;
         readonly RectTransform screen;
         readonly RectTransform menu, paused, ended, drive;
-        readonly Text score, best, km, speed, route, life, fuelNumber, toast, finalReason, finalResult, mute;
-        readonly Image fuelFill, impact;
+        readonly Text score, best, km, speed, route, life, fuelNumber, nitroNumber, nitroLabel, gear, toast, finalReason, finalResult, mute;
+        readonly Image fuelFill, nitroFill, impact;
+        readonly Image[] tach = new Image[18];
         readonly Button mainAction, resumeAction, restartAction, pauseButton;
         readonly string[] zones = { "ALPINE PASS", "GLACIER TUNNEL", "RAVEN BRIDGE" };
         readonly EventSystem input;
@@ -55,15 +56,37 @@ namespace Nightshift
             km = Metric(drive,"KM",new Vector2(296,-124));
             route = Label(drive, "ALPINE PASS", new Vector2(1,1),new Vector2(-164,-139),new Vector2(220,26),18,Type, TextAnchor.MiddleRight, FontStyle.Bold);
             Label(drive, "ROUTE", new Vector2(1,1),new Vector2(-164,-112),new Vector2(220,26),13,Muted, TextAnchor.MiddleRight);
-            life = Label(drive, "♥  ♥  ♥", new Vector2(0,0),new Vector2(171,100),new Vector2(250,38),30,new Color(1,.31f,.43f),TextAnchor.MiddleLeft, FontStyle.Bold);
-            Label(drive, "FUEL",new Vector2(0,0),new Vector2(89,62),new Vector2(86,25),15,Muted,TextAnchor.MiddleLeft);
-            fuelNumber = Label(drive,"100%",new Vector2(0,0),new Vector2(272,62),new Vector2(52,25),15,Type,TextAnchor.MiddleRight);
-            ImageArea("Fuel track",drive,new Vector2(0,0),new Vector2(172,44),new Vector2(252,8),new Color(.30f,.37f,.46f,.76f),false);
-            fuelFill = ImageArea("Fuel remaining",drive,new Vector2(0,0),new Vector2(46,44),new Vector2(252,8),Accent,false);
-            fuelFill.rectTransform.pivot = new Vector2(0,.5f); fuelFill.rectTransform.anchoredPosition = new Vector2(46,44);
-            speed = Label(drive,"128",new Vector2(1,0),new Vector2(-158,114),new Vector2(223,112),95,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
-            Label(drive,"KM/H",new Vector2(1,0),new Vector2(-157,54),new Vector2(222,26),16,Muted,TextAnchor.MiddleRight,FontStyle.Bold);
-            ImageArea("Speed underline",drive,new Vector2(1,0),new Vector2(-119,35),new Vector2(146,3),Accent,false);
+            life = Label(drive, "♥  ♥  ♥", new Vector2(0,0),new Vector2(171,143),new Vector2(250,38),30,new Color(.89f,.38f,.45f),TextAnchor.MiddleLeft, FontStyle.Bold);
+            Label(drive, "FUEL",new Vector2(0,0),new Vector2(89,105),new Vector2(86,25),15,Muted,TextAnchor.MiddleLeft);
+            fuelNumber = Label(drive,"100%",new Vector2(0,0),new Vector2(272,105),new Vector2(52,25),15,Type,TextAnchor.MiddleRight);
+            ImageArea("Fuel track",drive,new Vector2(0,0),new Vector2(172,87),new Vector2(252,8),new Color(.30f,.37f,.46f,.76f),false);
+            fuelFill = ImageArea("Fuel remaining",drive,new Vector2(0,0),new Vector2(46,87),new Vector2(252,8),Accent,false);
+            fuelFill.rectTransform.pivot = new Vector2(0,.5f); fuelFill.rectTransform.anchoredPosition = new Vector2(46,87);
+
+            nitroLabel = Label(drive,"NITRO · W",new Vector2(0,0),new Vector2(138,62),new Vector2(184,25),15,Muted,TextAnchor.MiddleLeft);
+            nitroNumber = Label(drive,"100%",new Vector2(0,0),new Vector2(272,62),new Vector2(52,25),15,Type,TextAnchor.MiddleRight);
+            ImageArea("Nitro track",drive,new Vector2(0,0),new Vector2(172,44),new Vector2(252,8),new Color(.30f,.37f,.46f,.76f),false);
+            nitroFill = ImageArea("Nitro remaining",drive,new Vector2(0,0),new Vector2(46,44),new Vector2(252,8),new Color(.63f,.71f,.79f),false);
+            nitroFill.rectTransform.pivot = new Vector2(0,.5f); nitroFill.rectTransform.anchoredPosition = new Vector2(46,44);
+
+            Vector2 bottomRight = new Vector2(1,0);
+            ImageArea("Instrument panel",drive,bottomRight,new Vector2(-206,123),new Vector2(318,180),new Color(.042f,.062f,.09f,.96f),false);
+            ImageArea("Instrument lip",drive,bottomRight,new Vector2(-206,34),new Vector2(318,2),new Color(.47f,.54f,.62f),false);
+            Label(drive,"RPM",bottomRight,new Vector2(-306,190),new Vector2(82,17),12,Muted,TextAnchor.MiddleLeft,FontStyle.Bold);
+            Label(drive,"×1000",bottomRight,new Vector2(-95,190),new Vector2(60,17),12,Muted,TextAnchor.MiddleRight);
+            for (int i = 0; i < tach.Length; i++)
+            {
+                tach[i] = ImageArea("Tachometer segment",drive,bottomRight,new Vector2(-341 + i * 16,171),new Vector2(13,12),Tile,false);
+                tach[i].rectTransform.localRotation = Quaternion.Euler(0,0,-8);
+            }
+            for (int i = 0; i < 5; i++)
+                Label(drive,(i * 2 + 1).ToString(),bottomRight,new Vector2(-341+i*67.5f,153),new Vector2(18,16),11,Muted,TextAnchor.MiddleCenter,FontStyle.Bold);
+            ImageArea("Instrument divider",drive,bottomRight,new Vector2(-206,140),new Vector2(286,1),new Color(.39f,.46f,.54f,.45f),false);
+            speed = Label(drive,"128",bottomRight,new Vector2(-241,98),new Vector2(212,75),76,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
+            Label(drive,"KM/H",bottomRight,new Vector2(-302,52),new Vector2(90,20),13,Muted,TextAnchor.MiddleLeft,FontStyle.Bold);
+            ImageArea("Gear pod",drive,bottomRight,new Vector2(-93,86),new Vector2(63,72),new Color(.11f,.15f,.20f),false);
+            Label(drive,"GEAR",bottomRight,new Vector2(-93,110),new Vector2(54,17),11,Muted,TextAnchor.MiddleCenter,FontStyle.Bold);
+            gear = Label(drive,"3",bottomRight,new Vector2(-93,80),new Vector2(54,40),31,Type,TextAnchor.MiddleCenter,FontStyle.Bold);
             toast = Label(drive,"",new Vector2(.5f,0),new Vector2(0,162),new Vector2(420,36),22,Accent,TextAnchor.MiddleCenter,FontStyle.Bold);
 
             menu = Panel("Main menu");
@@ -74,7 +97,7 @@ namespace Nightshift
                 new Vector2(365,-55),new Vector2(526,68),21,Muted,TextAnchor.MiddleLeft);
             mainAction = Action(menu,"START DRIVE",new Vector2(0,.5f),new Vector2(201,-132),new Vector2(198,53),true,game.StartRun);
             Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(372,-132),new Vector2(124,53),false,game.Exit);
-            Label(menu,"A / D   CHANGE LANES     W   THROTTLE     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
+            Label(menu,"A / D   CHANGE LANES     W   NITRO     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
                 new Vector2(632,30),16,Muted,TextAnchor.MiddleLeft);
             Label(menu,"FERRARI 458 ITALIA",new Vector2(1,0),new Vector2(-245,62),new Vector2(370,45),32,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
 
@@ -126,12 +149,24 @@ namespace Nightshift
                 finalResult.text = $"SCORE   {game.Score:0000}        BEST   {game.Best:0000}        {game.Distance / 1000:0.00} KM";
             }
             score.text = game.Score.ToString("0000"); best.text = game.Best.ToString("0000");
-            km.text = (game.Distance / 1000).ToString("0.00"); speed.text = Mathf.RoundToInt(game.Speed * 3.6f).ToString();
+            km.text = (game.Distance / 1000).ToString("0.00");
+            float kmh = game.Speed * 3.6f;
+            int currentGear = Transmission.GearIndex(kmh);
+            speed.text = Mathf.RoundToInt(kmh).ToString("000");
+            gear.text = (currentGear + 1).ToString();
+            int lit = Mathf.CeilToInt(tach.Length * Transmission.Revolutions(kmh, currentGear) / 9000);
+            for (int i = 0; i < tach.Length; i++)
+                tach[i].color = i < lit
+                    ? i >= 15 ? new Color(.89f,.54f,.47f) : new Color(.84f,.88f,.92f)
+                    : i >= 15 ? new Color(.31f,.21f,.23f) : new Color(.22f,.27f,.33f);
             route.text = zones[game.Zone];
             life.text = (game.Lives > 0 ? "♥" : "♡") + "  " + (game.Lives > 1 ? "♥" : "♡") + "  " + (game.Lives > 2 ? "♥" : "♡");
             fuelNumber.text = Mathf.CeilToInt(game.Fuel) + "%";
             fuelFill.rectTransform.sizeDelta = new Vector2(252 * game.Fuel / 100, 8);
-            fuelFill.color = game.Fuel < 23 ? new Color(1,.29f,.38f) : Accent;
+            fuelFill.color = game.Fuel < 23 ? new Color(.88f,.37f,.43f) : Accent;
+            nitroLabel.text = game.NitroEmptyWhileHeld ? "NITRO · RELEASE W" : "NITRO · W";
+            nitroNumber.text = Mathf.CeilToInt(game.Nitro) + "%";
+            nitroFill.rectTransform.sizeDelta = new Vector2(252 * game.Nitro / 100, 8);
             toast.gameObject.SetActive(game.MessageVisible);
             toast.text = game.Message;
         }

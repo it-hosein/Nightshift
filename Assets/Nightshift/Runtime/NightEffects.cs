@@ -11,7 +11,7 @@ namespace Nightshift
         readonly Transform[] jets = new Transform[3];
         readonly Material flame;
         float smokeTimer;
-        readonly Color[] colors = { new Color(.30f,.85f,1),new Color(1,.15f,.28f),new Color(1,.66f,.23f),new Color(.55f,.33f,1) };
+        readonly Color[] colors = { new Color(.82f,.87f,.97f),new Color(.94f,.58f,.47f),new Color(1,.78f,.51f),new Color(.79f,.74f,.88f) };
 
         public NightParticles(Transform parent, NightMaterials materials, Transform exhaustMount)
         {
@@ -128,8 +128,14 @@ namespace Nightshift
         }
 
         public void Crash(Vector3 at) => Burst(at,new Color(1,.48f,.13f),58,13,1.17f,.16f,new Vector3(0,1.3f,-6));
-        public void Pickup(Vector3 at,bool fuel) =>
-            Burst(at,fuel ? new Color(.51f,1,.25f) : new Color(1,.72f,.19f),31,4.8f,.68f,.30f,new Vector3(0,1.8f,-5));
+        public void Pickup(Vector3 at, PickupKind kind)
+        {
+            Color tint = kind == PickupKind.Heart ? new Color(.84f,.46f,.50f)
+                : kind == PickupKind.Fuel ? new Color(.62f,.70f,.49f) : new Color(1,.72f,.19f);
+            Burst(at,tint,31,4.8f,.68f,.30f,new Vector3(0,1.8f,-5));
+        }
+        public void RocketSpark(Vector3 at) =>
+            Burst(at,new Color(1,.86f,.65f),2,.34f,.28f,.23f,new Vector3(0,-.5f,-13));
         public void Fireworks(Vector3 at,int seed)
         {
             Burst(at,colors[seed%colors.Length],115,13,2.5f,.44f,new Vector3(0,-1.1f,-13));
@@ -137,11 +143,27 @@ namespace Nightshift
         }
     }
 
+    public static class Transmission
+    {
+        static readonly int[] UpperSpeeds = { 55, 100, 155, 215, 270, 335 };
+        public static int GearIndex(float kmh)
+        {
+            int index = 0;
+            while (index < UpperSpeeds.Length - 1 && kmh >= UpperSpeeds[index]) index++;
+            return index;
+        }
+        public static float Revolutions(float kmh, int gear)
+        {
+            int lower = gear == 0 ? 0 : UpperSpeeds[gear - 1];
+            return Mathf.Lerp(gear == 0 ? 1100 : 5000, 8500, Mathf.InverseLerp(lower, UpperSpeeds[gear], kmh));
+        }
+    }
+
     public sealed class NightAudio
     {
         const int Rate = 24000;
         readonly AudioSource engine, music, effects;
-        readonly AudioClip crash, coin, fuel;
+        readonly AudioClip crash, coin, fuel, heart;
         bool muted;
         delegate double Sample(double t, int index);
 
@@ -171,6 +193,7 @@ namespace Nightshift
             crash = Make("Impact",.66,(t, i) => ((random.NextDouble()*2-1)*.42+Math.Sin(Tau*(88*t-55*t*t))*.49)*Math.Exp(-t*10));
             coin = Make("Coin",.32,(t,i) => Math.Sin(Tau*740*t)*Fade(t,.22)*.28 + Math.Sin(Tau*1109*t)*Fade(t-.065,.24)*.33);
             fuel = Make("Refuel",.43,(t,i) => Math.Sin(Tau*392*t)*Fade(t,.21)*.33 + Math.Sin(Tau*698*t)*Fade(t-.07,.33)*.42);
+            heart = Make("Recover life",.36,(t,i) => Math.Sin(Tau*523*t)*Fade(t,.18)*.30 + Math.Sin(Tau*784*t)*Fade(t-.072,.26)*.37);
             engine.volume=0; music.volume=.21f; effects.volume=.58f;
             engine.Play(); music.Play();
         }
@@ -199,8 +222,8 @@ namespace Nightshift
         {
             if (muted) return;
             float km=speed*3.6f;
-            int gear=Mathf.Min(6,Mathf.FloorToInt(km/49)+1);
-            engine.pitch=Mathf.Lerp(engine.pitch,.82f+(km-(gear-1)*49)*.025f+gear*.073f,.12f);
+            float rpm = Transmission.Revolutions(km, Transmission.GearIndex(km));
+            engine.pitch = Mathf.Lerp(engine.pitch, .56f + rpm / 5700, .12f);
             engine.volume=Mathf.Lerp(engine.volume,active ? throttle ? .23f : .145f : .014f,.12f);
         }
         public void SetMute(bool value)
@@ -208,6 +231,6 @@ namespace Nightshift
             muted=value; music.mute=engine.mute=effects.mute=value;
         }
         public void Crash() { if(!muted) effects.PlayOneShot(crash); }
-        public void Pickup(bool isFuel) { if(!muted) effects.PlayOneShot(isFuel ? fuel : coin); }
+        public void Pickup(PickupKind kind) { if (!muted) effects.PlayOneShot(kind == PickupKind.Heart ? heart : kind == PickupKind.Fuel ? fuel : coin); }
     }
 }

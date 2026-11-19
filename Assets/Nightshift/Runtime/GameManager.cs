@@ -7,6 +7,7 @@ using UnityEngine.Rendering.PostProcessing;
 namespace Nightshift
 {
     public enum GameState { Menu, Playing, Paused, GameOver }
+    public enum PickupKind { Coin, Fuel, Heart }
 
     public sealed class GameManager : MonoBehaviour
     {
@@ -15,6 +16,8 @@ namespace Nightshift
         public double Distance { get; private set; }
         public float Speed { get; private set; }
         public float Fuel { get; private set; }
+        public float Nitro { get; private set; }
+        public bool NitroEmptyWhileHeld => Nitro <= 0 && throttle != null && throttle.IsPressed();
         public int Lives { get; private set; }
         public int Score => Mathf.FloorToInt(score);
         public int Best => Mathf.Max(record, Score);
@@ -25,8 +28,11 @@ namespace Nightshift
         public bool Muted { get; private set; }
 
         const string RecordKey = "nightshift-best";
-        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, fireAt;
-        double nextTraffic, nextCoin, nextFuel;
+        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, nitroIdle, fireAt, launchAt;
+        double rocketDistance;
+        Vector3 launchOrigin;
+        int rocketSeed;
+        double nextTraffic, nextCoin, nextFuel, nextHeart;
         int lane, record, spawnIndex;
         bool boosting, braking;
         Highway highway;
@@ -42,6 +48,7 @@ namespace Nightshift
         readonly TrafficObstacle[] laneLeaders = new TrafficObstacle[3];
         ObjectPool<CoinPickup> coins;
         ObjectPool<FuelPickup> fuels;
+        ObjectPool<HeartPickup> hearts;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
@@ -65,6 +72,7 @@ namespace Nightshift
             moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(art, i + 2, true), item => !item.Active);
             coins = new ObjectPool<CoinPickup>(24, i => new CoinPickup(art.Coin(transform)), item => !item.Active);
             fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(art.Can(transform)), item => !item.Active);
+            hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(art.Heart(transform)), item => !item.Active);
             effects = new NightParticles(transform, art, driver.ExhaustMount);
             audioRig = new NightAudio(transform);
             CreateActions();
@@ -124,7 +132,7 @@ namespace Nightshift
             var profile = ScriptableObject.CreateInstance<PostProcessProfile>();
             volume.sharedProfile = profile;
             var bloom = profile.AddSettings<Bloom>();
-            bloom.enabled.Override(true); bloom.intensity.Override(3.7f); bloom.threshold.Override(1.03f); bloom.softKnee.Override(.72f);
+            bloom.enabled.Override(true); bloom.intensity.Override(2.4f); bloom.threshold.Override(1.12f); bloom.softKnee.Override(.72f);
             var vignette = profile.AddSettings<Vignette>();
             vignette.enabled.Override(true); vignette.intensity.Override(.23f); vignette.smoothness.Override(.50f);
             var grade = profile.AddSettings<ColorGrading>();
@@ -141,7 +149,7 @@ namespace Nightshift
             var right = driving.AddAction("LaneRight", InputActionType.Button, "<Keyboard>/d");
             right.AddBinding("<Keyboard>/rightArrow"); right.AddBinding("<Gamepad>/dpad/right");
             right.performed += _ => lane = Mathf.Min(1, lane + 1);
-            throttle = driving.AddAction("Throttle", InputActionType.Button, "<Keyboard>/w");
+            throttle = driving.AddAction("Nitro", InputActionType.Button, "<Keyboard>/w");
             throttle.AddBinding("<Keyboard>/upArrow"); throttle.AddBinding("<Gamepad>/rightTrigger");
             brake = driving.AddAction("Brake", InputActionType.Button, "<Keyboard>/s");
             brake.AddBinding("<Keyboard>/downArrow"); brake.AddBinding("<Keyboard>/space"); brake.AddBinding("<Gamepad>/leftTrigger");
@@ -201,14 +209,16 @@ namespace Nightshift
         void ResetRun()
         {
             Distance = 0; x = 0; lane = 0; lateral = 0; Speed = 35.55f; elapsed = 0; score = 0;
-            Lives = 3; Fuel = 100; hitTime = 0; toast = 0; cameraX = 0; cameraY = 0;
-            nextTraffic = 163; nextCoin = 201; nextFuel = 515;
-            spawnIndex = 0; fireAt = 7; boosting = false; braking = false;
+            Lives = 3; Fuel = 100; Nitro = 100; nitroIdle = 0; hitTime = 0; toast = 0; cameraX = 0; cameraY = 0;
+            nextTraffic = 163; nextCoin = 201; nextFuel = 515; nextHeart = 1080;
+            spawnIndex = 0; fireAt = 7; launchAt = -1; boosting = false; braking = false;
             foreach (var item in cruising.Items) item.Release();
             foreach (var item in moving.Items) item.Release();
             foreach (var item in coins.Items) item.Release();
             foreach (var item in fuels.Items) item.Release();
+            foreach (var item in hearts.Items) item.Release();
             effects.Clear();
+            hud.SetImpact(0);
             moving.Take().Spawn(98, -1, 19);
             cruising.Take().Spawn(136, 1, 17);
             for (int i = 0; i < 3; i++) coins.Take().Spawn(73 + i * 6, 0);
@@ -243,7 +253,19 @@ namespace Nightshift
             double old = Distance;
             float oldX = x;
             elapsed += dt;
-            boosting = throttle.IsPressed(); braking = brake.IsPressed();
+            bool requested = throttle.IsPressed();
+            braking = brake.IsPressed();
+            boosting = requested && !braking && Nitro > 0;
+            if (boosting)
+            {
+                Nitro = Mathf.Max(0, Nitro - 20 * dt);
+                nitroIdle = 0;
+            }
+            else if (!requested)
+            {
+                nitroIdle += dt;
+                if (nitroIdle >= 2.5f) Nitro = Mathf.Min(100, Nitro + 7 * dt);
+            }
             float cruise = Mathf.Lerp(35.55f, 62, Mathf.Clamp01((float)Distance / 13000 + elapsed / 310));
             float goal = braking ? 21 : boosting ? 88 : cruise;
             Speed += (goal - Speed) * (braking ? 1.48f : boosting ? .43f : .31f) * dt;
@@ -258,13 +280,25 @@ namespace Nightshift
             SpawnRows();
             UpdateItems(dt, old, oldX, true);
             if (State != GameState.Playing) return;
-            if (elapsed > fireAt && Zone != 1)
+            TickFireworks();
+        }
+
+        void TickFireworks()
+        {
+            if (launchAt < 0 && elapsed >= fireAt && Zone != 1)
             {
-                fireAt = elapsed + 12 + Route.Noise(spawnIndex) * 7;
-                float side = Route.Noise(spawnIndex + 21) > .5f ? 1 : -1;
-                var p = new Vector3(Route.Center(Distance) + side * (33 + 17 * Route.Noise(spawnIndex + 18)), Route.Height(Distance) + 46, 115);
-                effects.Fireworks(p, spawnIndex);
+                launchAt = elapsed; rocketDistance = Distance + 168; rocketSeed = spawnIndex;
+                float side = Route.Noise(rocketSeed + 21) > .5f ? 1 : -1;
+                launchOrigin = new Vector3(Route.Center(rocketDistance) + side * (33 + 17 * Route.Noise(rocketSeed + 18)),
+                    Route.Height(rocketDistance) + 6, 0);
+                fireAt = elapsed + 12 + Route.Noise(rocketSeed) * 7;
             }
+            if (launchAt < 0) return;
+            float t = elapsed - launchAt;
+            Vector3 point = launchOrigin + new Vector3(0, 43 * (1 - Mathf.Pow(1 - Mathf.Clamp01(t), 1.4f)),
+                (float)(rocketDistance - Distance));
+            if (t < 1) effects.RocketSpark(point);
+            else { effects.Fireworks(point, rocketSeed); launchAt = -1; }
         }
 
         void SpawnRows()
@@ -295,6 +329,26 @@ namespace Nightshift
                 fuels.Take()?.Spawn(at, l);
                 nextFuel += 535 + 70 * Route.Noise(at);
             }
+            if (Distance + 335 >= nextHeart)
+            {
+                double at = nextHeart;
+                int preferred = LaneAt(at + 61) + 1;
+                for (int i = 0; i < 3; i++)
+                {
+                    int l = (preferred + i) % 3 - 1;
+                    if (TrafficNear(at, l, 20) || PickupNear(coins.Items, at, l) || PickupNear(fuels.Items, at, l)) continue;
+                    hearts.Take()?.Spawn(at, l);
+                    break;
+                }
+                nextHeart += 1200 + 600 * Route.Noise(at + 62);
+            }
+        }
+
+        static bool PickupNear<T>(T[] items, double at, int lane) where T : Pickup
+        {
+            foreach (var item in items)
+                if (item.Active && item.Lane == lane && Math.Abs(item.Distance - at) < 20) return true;
+            return false;
         }
 
         static int LaneAt(double seed) => Mathf.Min(2, (int)(Route.Noise(seed) * 3)) - 1;
@@ -345,16 +399,17 @@ namespace Nightshift
             }
             TickPickups(coins.Items, dt, old, oldX, collide);
             TickPickups(fuels.Items, dt, old, oldX, collide);
+            TickPickups(hearts.Items, dt, old, oldX, collide);
         }
 
-        void TickPickups<T>(T[] items, float dt, double old, float oldX, bool collide) where T : Interactable
+        void TickPickups<T>(T[] items, float dt, double old, float oldX, bool collide) where T : Pickup
         {
             foreach (var item in items)
             {
                 if (!item.Active) continue;
                 double before = item.Distance - old;
                 item.Tick(dt, Distance);
-                if (collide) CheckContact(item, before, item.Distance - Distance, oldX);
+                if (collide && !item.Collected) CheckContact(item, before, item.Distance - Distance, oldX);
             }
         }
 
@@ -401,12 +456,25 @@ namespace Nightshift
             if (Lives <= 0) End("Vehicle disabled");
         }
 
-        public void Collect(bool fuel, Vector3 position)
+        public void Collect(PickupKind kind, Vector3 position)
         {
-            if (fuel) Fuel = Mathf.Min(100, Fuel + 32);
-            else score += 125;
-            Message = fuel ? "FUEL +32" : "+125 SCORE"; toast = 1.5f;
-            effects.Pickup(position, fuel); audioRig.Pickup(fuel);
+            switch (kind)
+            {
+                case PickupKind.Fuel:
+                    Fuel = Mathf.Min(100, Fuel + 32);
+                    Message = "FUEL +32";
+                    break;
+                case PickupKind.Heart:
+                    Message = Lives < 3 ? "LIFE +1" : "LIVES FULL";
+                    Lives = Mathf.Min(3, Lives + 1);
+                    break;
+                default:
+                    score += 125;
+                    Message = "+125 SCORE";
+                    break;
+            }
+            toast = 1.5f;
+            effects.Pickup(position, kind); audioRig.Pickup(kind);
         }
 
         void End(string reason)
@@ -511,14 +579,51 @@ namespace Nightshift
         public MovingTraffic(DriverRig rig) : base(rig) { }
         public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, Mathf.Max(12, velocity));
     }
-    public sealed class CoinPickup : Interactable
+    public abstract class Pickup : Interactable
+    {
+        const float FadeTime = .26f;
+        float remaining;
+        public bool Collected => remaining > 0;
+        protected abstract PickupKind Kind { get; }
+        protected Pickup(Transform root) : base(root) { }
+
+        public override void Spawn(double distance, int lane, float velocity = 0)
+        {
+            base.Spawn(distance, lane, velocity);
+            remaining = 0;
+            Root.localScale = Vector3.one;
+        }
+
+        public override void Tick(float dt, double player)
+        {
+            base.Tick(dt, player);
+            if (!Collected) return;
+            remaining = Mathf.Max(0, remaining - dt);
+            Root.localScale = Vector3.one * (remaining / FadeTime);
+            if (remaining <= 0) Release();
+        }
+
+        public override void Contact(GameManager game)
+        {
+            game.Collect(Kind, Root.position);
+            remaining = FadeTime;
+        }
+    }
+
+    public sealed class CoinPickup : Pickup
     {
         public CoinPickup(Transform root) : base(root) { }
-        public override void Contact(GameManager game) { game.Collect(false, Root.position); Release(); }
+        protected override PickupKind Kind => PickupKind.Coin;
     }
-    public sealed class FuelPickup : Interactable
+    public sealed class FuelPickup : Pickup
     {
         public FuelPickup(Transform root) : base(root) { }
-        public override void Contact(GameManager game) { game.Collect(true, Root.position); Release(); }
+        protected override PickupKind Kind => PickupKind.Fuel;
+    }
+    public sealed class HeartPickup : Pickup
+    {
+        public HeartPickup(Transform root) : base(root) { }
+        protected override PickupKind Kind => PickupKind.Heart;
+        protected override float Height => .87f;
     }
 }

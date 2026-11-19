@@ -33,8 +33,8 @@ Shader "Nightshift/Exhaust Flame"
                 float profile = abs(i.uv.x * 2 - 1 - ripple * t);
                 float edge = 1 - smoothstep(.12, max(.15, taper), profile);
                 float core = (1 - smoothstep(.01, max(.12, taper * .48), profile)) * (1 - smoothstep(.22, .69, t));
-                half3 color = lerp(half3(.08, .48, 1.90), half3(2.70, .33, .018), smoothstep(.20, .68, t));
-                color = lerp(color, half3(2.7, 2.9, 3.8), core);
+                half3 color = lerp(half3(.28, .54, .92), half3(1.65, .38, .047), smoothstep(.20, .68, t));
+                color = lerp(color, half3(2.05, 2.02, 1.94), core);
                 return half4(color, edge * (1 - smoothstep(.45, 1, t)) * smoothstep(0, .07, t));
             }
             ENDCG

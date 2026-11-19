@@ -8,8 +8,10 @@ namespace Nightshift
     public sealed class NightMaterials
     {
         public readonly Material Asphalt, Markings, Marker, Metal, Concrete, Lamp, ColdLamp, Land, Tree, Water;
-        public readonly Material AmberGlow, BlueGlow, RedGlow, HeadGlow, UnderGlow, Shadow, Fire, Sky;
+        public readonly Material AmberGlow, BlueGlow, RedGlow, HeadGlow, Shadow, Fire, Sky;
         public readonly Material Gold, GoldDark, Fuel, Rubber, Glass;
+        readonly Material heartMaterial;
+        readonly Mesh heartMesh;
         public readonly Material[] Paints;
         public readonly GameObject CarAsset;
         public readonly GameObject[] TrafficAssets;
@@ -35,7 +37,9 @@ namespace Nightshift
             Water = Surface("River", new Color(.18f, .29f, .45f), .82f, .64f);
             Gold = Lit("Coin gold", new Color(.98f, .66f, .13f), 1.35f);
             GoldDark = Surface("Coin stamping", new Color(.65f, .34f, .055f), .58f, .71f);
-            Fuel = Lit("Fuel green", new Color(.54f, 1, .23f), .61f);
+            Fuel = Lit("Fuel sage", new Color(.57f,.65f,.46f), .24f);
+            heartMaterial = Lit("Red enamel heart", new Color(.79f,.28f,.33f), .33f);
+            heartMesh = BuildHeartMesh();
             Rubber = Surface("Rubber", new Color(.07f, .09f, .12f), .38f);
             Glass = Surface("Tinted glass", new Color(.16f,.23f,.37f), .93f, .38f);
             Paints = new Material[PaintColors.Length];
@@ -46,7 +50,6 @@ namespace Nightshift
             BlueGlow = GlowMaterial("Tunnel light wash", halo, new Color(.55f, .76f, 1, .21f));
             RedGlow = GlowMaterial("Brake light reflection", halo, new Color(1,.05f,.13f,.31f));
             HeadGlow = GlowMaterial("Headlight wash", halo, new Color(.64f,.79f,1,.35f));
-            UnderGlow = GlowMaterial("Speed-reactive cyan underglow", halo, new Color(.15f,.65f,1,.36f));
             Shadow = GlowMaterial("Ground contact shadow", Resources.Load<Texture2D>("Nightshift/CarAO"),
                 new Color(.01f,.019f,.035f,.89f));
             Shadow.SetFloat("_Shadow", 1);
@@ -135,6 +138,52 @@ namespace Nightshift
             return root;
         }
 
+        public Transform Heart(Transform parent)
+        {
+            var heart = new GameObject("Pooled heart", typeof(MeshFilter), typeof(MeshRenderer));
+            heart.transform.SetParent(parent, false);
+            heart.GetComponent<MeshFilter>().sharedMesh = heartMesh;
+            heart.GetComponent<MeshRenderer>().sharedMaterial = heartMaterial;
+            return heart.transform;
+        }
+
+        static Mesh BuildHeartMesh()
+        {
+            const int sides = 64, rings = 4;
+            var points = new List<Vector3>(sides * rings + 2);
+            var triangles = new List<int>(sides * 24);
+            for (int ring = 0; ring < rings; ring++)
+            {
+                float radius = ring == 0 || ring == rings - 1 ? .85f : 1;
+                float z = ring < 2 ? -.10f : .10f;
+                if (radius == 1) z *= .60f;
+                for (int i = 0; i < sides; i++)
+                {
+                    float t = i * Mathf.PI * 2 / sides, sin = Mathf.Sin(t);
+                    float x = 16 * sin * sin * sin;
+                    float y = 13 * Mathf.Cos(t) - 5 * Mathf.Cos(2 * t) - 2 * Mathf.Cos(3 * t) - Mathf.Cos(4 * t) + 2;
+                    points.Add(new Vector3(x * .024f * radius, y * .024f * radius, z));
+                }
+            }
+            int back = points.Count, front = back + 1;
+            points.Add(new Vector3(0, 0, -.10f)); points.Add(new Vector3(0, 0, .10f));
+            for (int i = 0; i < sides; i++)
+            {
+                int next = (i + 1) % sides;
+                triangles.Add(back); triangles.Add(i); triangles.Add(next);
+                triangles.Add(front); triangles.Add(3 * sides + next); triangles.Add(3 * sides + i);
+                for (int ring = 0; ring < rings - 1; ring++)
+                {
+                    int a = ring * sides + i, b = ring * sides + next;
+                    triangles.Add(a); triangles.Add(a+sides); triangles.Add(b);
+                    triangles.Add(b); triangles.Add(a+sides); triangles.Add(b+sides);
+                }
+            }
+            var mesh = new Mesh { name = "Beveled collection heart" };
+            mesh.SetVertices(points); mesh.SetTriangles(triangles,0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            return mesh;
+        }
+
         public Transform Can(Transform parent)
         {
             var root = new GameObject("Pooled fuel can").transform; root.SetParent(parent, false);
@@ -158,7 +207,7 @@ namespace Nightshift
         public Transform ExhaustMount => shell;
         readonly Transform shell;
         readonly List<Transform> wheels = new List<Transform>(4);
-        readonly Material tail, glow, tailLight;
+        readonly Material tail, tailLight;
         readonly bool player;
         readonly Color redColor = new Color(1,.04f,.08f);
         float pitch, roll;
@@ -215,8 +264,6 @@ namespace Nightshift
                 SetGroundGlow(art, tail, "Tail light reflection", .83f * side, .027f, -4.18f, 2.12f, 5.25f);
 
             if (!player) return;
-            glow = new Material(art.UnderGlow);
-            SetGroundGlow(art, glow, "Adaptive neon underglow", 0, .028f, -.1f, 3.62f, 6.04f);
             foreach (int side in Signs.Values)
             {
                 SetGroundGlow(art, art.HeadGlow, "Headlight reflection", side * .84f, .031f, 11, 4.39f, 22);
@@ -243,8 +290,6 @@ namespace Nightshift
             shell.localRotation = Quaternion.Euler(pitch,0,roll);
             foreach (var wheel in wheels) wheel.Rotate(Vector3.right, speed * dt / .351f * Mathf.Rad2Deg, Space.Self);
             if (!player) return;
-            Color glowColor = new Color(.12f,.66f,1,Mathf.Lerp(.25f,.66f,speed/92));
-            glow.color = glowColor;
             tail.color = new Color(1,.04f,.11f,brake ? .72f : .39f);
             tailLight.SetColor("_EmissionColor", redColor * (brake ? 7.2f : 3.7f));
         }
