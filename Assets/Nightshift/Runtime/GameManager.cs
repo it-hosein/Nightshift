@@ -29,10 +29,7 @@ namespace Nightshift
 
         public bool CourseMode { get; private set; }
         string RecordKey => CourseMode ? "nightshift-best-course" : "nightshift-best";
-        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, nitroIdle, fireAt, launchAt;
-        double rocketDistance;
-        Vector3 launchOrigin;
-        int rocketSeed;
+        float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, nitroIdle;
         double nextTraffic, nextCoin, nextFuel, nextHeart, nextStatic;
         int lane, record, spawnIndex;
         bool boosting, braking;
@@ -40,6 +37,7 @@ namespace Nightshift
         DriverRig driver;
         NightAudio audioRig;
         NightParticles effects;
+        SkyFireworks fireworks;
         GameHud hud;
         Camera chase;
         InputActionMap driving, menus;
@@ -77,6 +75,7 @@ namespace Nightshift
             fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(art.Can(transform)), item => !item.Active);
             hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(art.Heart(transform)), item => !item.Active);
             effects = new NightParticles(transform, art, driver.ExhaustMount);
+            fireworks = new SkyFireworks(transform);
             audioRig = new NightAudio(transform);
             CreateActions();
             hud = new GameHud(this);
@@ -223,7 +222,7 @@ namespace Nightshift
             Distance = 0; x = 0; lane = 0; lateral = 0; Speed = 35.55f; elapsed = 0; score = 0;
             Lives = 3; Fuel = 100; Nitro = 100; nitroIdle = 0; hitTime = 0; toast = 0; cameraX = 0; cameraY = 0;
             nextTraffic = 163; nextCoin = 201; nextFuel = 515; nextHeart = 1080; nextStatic = 980;
-            spawnIndex = 0; fireAt = 7; launchAt = -1; boosting = false; braking = false;
+            spawnIndex = 0; boosting = false; braking = false;
             foreach (var item in cruising.Items) item.Release();
             foreach (var item in moving.Items) item.Release();
             foreach (var item in stationary.Items) item.Release();
@@ -231,6 +230,7 @@ namespace Nightshift
             foreach (var item in fuels.Items) item.Release();
             foreach (var item in hearts.Items) item.Release();
             effects.Clear();
+            fireworks.Reset();
             hud.SetImpact(0);
             moving.Take().Spawn(98, -1, 19);
             cruising.Take().Spawn(136, 1, 17);
@@ -257,7 +257,11 @@ namespace Nightshift
             for (int i = 0; i < steps && State == GameState.Playing; i++) Simulate(dt / steps);
             highway.Update(Distance);
             Position(dt);
-            if (State == GameState.Playing) effects.Exhaust(dt, elapsed, Speed, boosting && !braking);
+            if (State == GameState.Playing)
+            {
+                effects.Exhaust(dt, elapsed, Speed, boosting && !braking);
+                fireworks.Update(elapsed, Distance, Speed);
+            }
             audioRig.Tick(Speed, State == GameState.Playing, boosting);
             hud.Tick();
         }
@@ -293,26 +297,6 @@ namespace Nightshift
             if (Fuel <= 0) { End("Out of fuel"); return; }
             SpawnRows();
             UpdateItems(dt, old, oldX, true);
-            if (State != GameState.Playing) return;
-            TickFireworks();
-        }
-
-        void TickFireworks()
-        {
-            if (launchAt < 0 && elapsed >= fireAt && Zone != 1)
-            {
-                launchAt = elapsed; rocketDistance = Distance + 168; rocketSeed = spawnIndex;
-                float side = Route.Noise(rocketSeed + 21) > .5f ? 1 : -1;
-                launchOrigin = new Vector3(Route.Center(rocketDistance) + side * (33 + 17 * Route.Noise(rocketSeed + 18)),
-                    Route.Height(rocketDistance) + 6, 0);
-                fireAt = elapsed + 12 + Route.Noise(rocketSeed) * 7;
-            }
-            if (launchAt < 0) return;
-            float t = elapsed - launchAt;
-            Vector3 point = launchOrigin + new Vector3(0, 43 * (1 - Mathf.Pow(1 - Mathf.Clamp01(t), 1.4f)),
-                (float)(rocketDistance - Distance));
-            if (t < 1) effects.RocketSpark(point);
-            else { effects.Fireworks(point, rocketSeed); launchAt = -1; }
         }
 
         void SpawnRows()

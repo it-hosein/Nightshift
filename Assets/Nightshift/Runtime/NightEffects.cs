@@ -11,8 +11,6 @@ namespace Nightshift
         readonly Transform[] jets = new Transform[3];
         readonly Material flame;
         float smokeTimer;
-        readonly Color[] colors = { new Color(.82f,.87f,.97f),new Color(.94f,.58f,.47f),new Color(1,.78f,.51f),new Color(.79f,.74f,.88f) };
-
         public NightParticles(Transform parent, NightMaterials materials, Transform exhaustMount)
         {
             this.exhaustMount = exhaustMount;
@@ -133,13 +131,6 @@ namespace Nightshift
             Color tint = kind == PickupKind.Heart ? new Color(.84f,.46f,.50f)
                 : kind == PickupKind.Fuel ? new Color(.62f,.70f,.49f) : new Color(1,.72f,.19f);
             Burst(at,tint,31,4.8f,.68f,.30f,new Vector3(0,1.8f,-5));
-        }
-        public void RocketSpark(Vector3 at) =>
-            Burst(at,new Color(1,.86f,.65f),2,.34f,.28f,.23f,new Vector3(0,-.5f,-13));
-        public void Fireworks(Vector3 at,int seed)
-        {
-            Burst(at,colors[seed%colors.Length],115,13,2.5f,.44f,new Vector3(0,-1.1f,-13));
-            Burst(at+new Vector3(8,5,6),colors[(seed+1)%colors.Length],65,10.5f,2.2f,.42f,new Vector3(0,-1.25f,-13));
         }
     }
 
