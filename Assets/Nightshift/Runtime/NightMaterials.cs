@@ -8,7 +8,7 @@ namespace Nightshift
     public sealed class NightMaterials
     {
         public readonly Material Asphalt, Markings, Marker, Metal, Concrete, Lamp, ColdLamp, Land, Tree, Water;
-        public readonly Material AmberGlow, BlueGlow, RedGlow, HeadGlow, Shadow, Fire, Sky;
+        public readonly Material AmberGlow, BlueGlow, RedGlow, HeadGlow, CourseGlow, Shadow, Fire, Sky;
         public readonly Material Gold, GoldDark, Fuel, Rubber, Glass;
         readonly Material heartMaterial;
         readonly Mesh heartMesh;
@@ -50,6 +50,7 @@ namespace Nightshift
             BlueGlow = GlowMaterial("Tunnel light wash", halo, new Color(.55f, .76f, 1, .21f));
             RedGlow = GlowMaterial("Brake light reflection", halo, new Color(1,.05f,.13f,.31f));
             HeadGlow = GlowMaterial("Headlight wash", halo, new Color(.64f,.79f,1,.35f));
+            CourseGlow = GlowMaterial("Course cyan underglow", halo, new Color(.40f,.77f,1,.32f));
             Shadow = GlowMaterial("Ground contact shadow", Resources.Load<Texture2D>("Nightshift/CarAO"),
                 new Color(.01f,.019f,.035f,.89f));
             Shadow.SetFloat("_Shadow", 1);
@@ -209,6 +210,9 @@ namespace Nightshift
         readonly List<Transform> wheels = new List<Transform>(4);
         readonly Material tail, tailLight;
         readonly bool player;
+        readonly Transform courseGlow;
+        readonly Material courseGlowMaterial;
+        readonly Light courseLamp;
         readonly Color redColor = new Color(1,.04f,.08f);
         float pitch, roll;
 
@@ -264,6 +268,20 @@ namespace Nightshift
                 SetGroundGlow(art, tail, "Tail light reflection", .83f * side, .027f, -4.18f, 2.12f, 5.25f);
 
             if (!player) return;
+            courseGlowMaterial = new Material(art.CourseGlow);
+            courseGlow = art.Glow(Root, "Speed-responsive course underglow", courseGlowMaterial);
+            courseGlow.localPosition = new Vector3(0,.028f,-.12f);
+            courseGlow.localScale = new Vector3(4.6f,6.9f,1);
+            courseGlow.gameObject.SetActive(false);
+
+            var lamp = new GameObject("Course underbody light", typeof(Light));
+            lamp.transform.SetParent(Root, false);
+            lamp.transform.localPosition = new Vector3(0,.24f,0);
+            courseLamp = lamp.GetComponent<Light>();
+            courseLamp.type = LightType.Point;
+            courseLamp.color = new Color(.40f,.77f,1);
+            courseLamp.range = 3.6f;
+            courseLamp.enabled = false;
             foreach (int side in Signs.Values)
             {
                 SetGroundGlow(art, art.HeadGlow, "Headlight reflection", side * .84f, .031f, 11, 4.39f, 22);
@@ -280,6 +298,19 @@ namespace Nightshift
         {
             Transform g = art.Glow(Root, name, material);
             g.localPosition = new Vector3(x,y,z); g.localScale = new Vector3(width,length,1);
+        }
+
+        public void SetCourseUnderglow(bool enabled, float speed)
+        {
+            if (!player) return;
+            courseGlow.gameObject.SetActive(enabled);
+            courseLamp.enabled = enabled;
+            if (!enabled) return;
+            float factor = Mathf.Clamp01(speed / 90);
+            var color = courseGlowMaterial.color;
+            color.a = Mathf.Lerp(.19f,.78f,factor);
+            courseGlowMaterial.color = color;
+            courseLamp.intensity = Mathf.Lerp(.28f,1.75f,factor);
         }
 
         public void Drive(float speed, float lateral, bool throttle, bool brake, float dt)

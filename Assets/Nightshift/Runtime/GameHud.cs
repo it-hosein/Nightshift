@@ -16,7 +16,7 @@ namespace Nightshift
         readonly Canvas canvas;
         readonly RectTransform screen;
         readonly RectTransform menu, paused, ended, drive;
-        readonly Text score, best, km, speed, route, life, fuelNumber, nitroNumber, nitroLabel, gear, toast, finalReason, finalResult, mute;
+        readonly Text score, best, km, speed, route, life, fuelNumber, nitroNumber, nitroLabel, gear, toast, finalReason, finalResult, mute, courseMode;
         readonly Image fuelFill, nitroFill, impact;
         readonly Image[] tach = new Image[18];
         readonly Button mainAction, resumeAction, restartAction, pauseButton;
@@ -97,6 +97,8 @@ namespace Nightshift
                 new Vector2(365,-55),new Vector2(526,68),21,Muted,TextAnchor.MiddleLeft);
             mainAction = Action(menu,"START DRIVE",new Vector2(0,.5f),new Vector2(201,-132),new Vector2(198,53),true,game.StartRun);
             Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(372,-132),new Vector2(124,53),false,game.Exit);
+            var course = Action(menu,"COURSE MODE", new Vector2(0,.5f),new Vector2(522,-132),new Vector2(152,53),false,game.ToggleCourseMode);
+            courseMode = course.GetComponentInChildren<Text>();
             Label(menu,"A / D   CHANGE LANES     W   NITRO     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
                 new Vector2(632,30),16,Muted,TextAnchor.MiddleLeft);
             Label(menu,"FERRARI 458 ITALIA",new Vector2(1,0),new Vector2(-245,62),new Vector2(370,45),32,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
@@ -130,6 +132,7 @@ namespace Nightshift
             drive.gameObject.SetActive(state == GameState.Playing || state == GameState.Paused);
             pauseButton.gameObject.SetActive(state == GameState.Playing);
             mute.text = game.Muted ? "SOUND OFF" : "SOUND ON";
+            courseMode.text = game.CourseMode ? "COURSE MODE · ON" : "COURSE MODE";
             if (!refreshed || previous != state)
             {
                 if (state == GameState.Menu) input.SetSelectedGameObject(mainAction.gameObject);

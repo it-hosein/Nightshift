@@ -27,12 +27,13 @@ namespace Nightshift
         public bool MessageVisible => toast > 0;
         public bool Muted { get; private set; }
 
-        const string RecordKey = "nightshift-best";
+        public bool CourseMode { get; private set; }
+        string RecordKey => CourseMode ? "nightshift-best-course" : "nightshift-best";
         float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, nitroIdle, fireAt, launchAt;
         double rocketDistance;
         Vector3 launchOrigin;
         int rocketSeed;
-        double nextTraffic, nextCoin, nextFuel, nextHeart;
+        double nextTraffic, nextCoin, nextFuel, nextHeart, nextStatic;
         int lane, record, spawnIndex;
         bool boosting, braking;
         Highway highway;
@@ -43,8 +44,8 @@ namespace Nightshift
         Camera chase;
         InputActionMap driving, menus;
         InputAction throttle, brake;
-        ObjectPool<TrafficObstacle> cruising, moving;
-        readonly List<TrafficObstacle> trafficOrder = new List<TrafficObstacle>(25);
+        ObjectPool<TrafficObstacle> cruising, moving, stationary;
+        readonly List<TrafficObstacle> trafficOrder = new List<TrafficObstacle>(28);
         readonly TrafficObstacle[] laneLeaders = new TrafficObstacle[3];
         ObjectPool<CoinPickup> coins;
         ObjectPool<FuelPickup> fuels;
@@ -70,6 +71,8 @@ namespace Nightshift
             driver = new DriverRig(transform, art, true, 0);
             cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(art, i, false), item => !item.Active);
             moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(art, i + 2, true), item => !item.Active);
+            stationary = new ObjectPool<TrafficObstacle>(3, i =>
+                new StaticTraffic(new DriverRig(transform, art, false, i * 2 + 2), art), item => !item.Active);
             coins = new ObjectPool<CoinPickup>(24, i => new CoinPickup(art.Coin(transform)), item => !item.Active);
             fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(art.Can(transform)), item => !item.Active);
             hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(art.Heart(transform)), item => !item.Active);
@@ -163,6 +166,15 @@ namespace Nightshift
             menus.Enable();
         }
 
+        public void ToggleCourseMode()
+        {
+            if (State != GameState.Menu) return;
+            CourseMode = !CourseMode;
+            record = PlayerPrefs.GetInt(RecordKey, 0);
+            ResetRun();
+            hud.Refresh();
+        }
+
         public void StartRun()
         {
             CommitScore(); ResetRun(); Change(GameState.Playing);
@@ -210,10 +222,11 @@ namespace Nightshift
         {
             Distance = 0; x = 0; lane = 0; lateral = 0; Speed = 35.55f; elapsed = 0; score = 0;
             Lives = 3; Fuel = 100; Nitro = 100; nitroIdle = 0; hitTime = 0; toast = 0; cameraX = 0; cameraY = 0;
-            nextTraffic = 163; nextCoin = 201; nextFuel = 515; nextHeart = 1080;
+            nextTraffic = 163; nextCoin = 201; nextFuel = 515; nextHeart = 1080; nextStatic = 980;
             spawnIndex = 0; fireAt = 7; launchAt = -1; boosting = false; braking = false;
             foreach (var item in cruising.Items) item.Release();
             foreach (var item in moving.Items) item.Release();
+            foreach (var item in stationary.Items) item.Release();
             foreach (var item in coins.Items) item.Release();
             foreach (var item in fuels.Items) item.Release();
             foreach (var item in hearts.Items) item.Release();
@@ -221,6 +234,7 @@ namespace Nightshift
             hud.SetImpact(0);
             moving.Take().Spawn(98, -1, 19);
             cruising.Take().Spawn(136, 1, 17);
+            if (CourseMode) stationary.Take().Spawn(212, 1);
             for (int i = 0; i < 3; i++) coins.Take().Spawn(73 + i * 6, 0);
             highway.Update(Distance);
             Position(0);
@@ -304,6 +318,17 @@ namespace Nightshift
         void SpawnRows()
         {
             float pressure = Mathf.Clamp01(elapsed / 180 + (float)Distance / 22000);
+            if (CourseMode && Distance + 335 >= nextStatic)
+            {
+                double at = nextStatic;
+                if (Route.Zone((int)(at / Route.Length)) != 1)
+                {
+                    int side = Route.Noise(at + 91) > .5f ? 1 : -1;
+                    int target = TrafficNear(at, side, 48) ? -side : side;
+                    if (!TrafficNear(at, target, 48)) stationary.Take()?.Spawn(at, target);
+                }
+                nextStatic += 720 + 310 * Route.Noise(at + 92);
+            }
             while (Distance + 335 >= nextTraffic)
             {
                 double at = nextTraffic;
@@ -323,10 +348,14 @@ namespace Nightshift
             if (Distance + 335 >= nextFuel)
             {
                 double at = nextFuel;
-                int l = LaneAt(at + 22);
-                if (TrafficNear(at, l, 10))
-                    l = l == 1 ? -1 : l + 1;
-                fuels.Take()?.Spawn(at, l);
+                int preferred = LaneAt(at + 22) + 1;
+                for (int i = 0; i < 3; i++)
+                {
+                    int l = (preferred + i) % 3 - 1;
+                    if (TrafficNear(at, l, 12)) continue;
+                    fuels.Take()?.Spawn(at, l);
+                    break;
+                }
                 nextFuel += 535 + 70 * Route.Noise(at);
             }
             if (Distance + 335 >= nextHeart)
@@ -354,7 +383,8 @@ namespace Nightshift
         static int LaneAt(double seed) => Mathf.Min(2, (int)(Route.Noise(seed) * 3)) - 1;
         bool TrafficNear(double at, int lane, double gap)
         {
-            return TrafficNear(cruising.Items, at, lane, gap) || TrafficNear(moving.Items, at, lane, gap);
+            return TrafficNear(cruising.Items, at, lane, gap) || TrafficNear(moving.Items, at, lane, gap)
+                || TrafficNear(stationary.Items, at, lane, gap);
         }
 
         static bool TrafficNear(TrafficObstacle[] cars, double at, int lane, double gap)
@@ -376,6 +406,7 @@ namespace Nightshift
             trafficOrder.Clear();
             foreach (var car in cruising.Items) if (car.Active) trafficOrder.Add(car);
             foreach (var car in moving.Items) if (car.Active) trafficOrder.Add(car);
+            foreach (var car in stationary.Items) if (car.Active) trafficOrder.Add(car);
             trafficOrder.Sort((a, b) => b.Distance.CompareTo(a.Distance));
             Array.Clear(laneLeaders, 0, laneLeaders.Length);
             foreach (var car in trafficOrder)
@@ -427,6 +458,7 @@ namespace Nightshift
             driver.Root.localPosition = new Vector3(Route.Center(Distance) + x, height + .034f, 0);
             driver.Root.localRotation = Quaternion.Euler(0, Route.Yaw(Distance) + Mathf.Clamp(lateral * 1.26f, -11, 11), 0);
             driver.Drive(Speed, lateral, boosting, braking, State == GameState.Playing ? dt : 0);
+            driver.SetCourseUnderglow(CourseMode, Speed);
             float flex = 1 - Mathf.Exp(-dt * 5);
             cameraX = Mathf.Lerp(cameraX, x * .62f, flex);
             cameraY = Mathf.Lerp(cameraY, height, dt <= 0 ? 1 : 1 - Mathf.Exp(-dt * 8));
@@ -448,7 +480,6 @@ namespace Nightshift
 
         public void Impact()
         {
-            if (hitTime > .23f) return;
             Lives--; Speed = Mathf.Max(22, Speed * .68f); hitTime = .67f;
             Message = "COLLISION"; toast = 1.4f;
             effects.Crash(driver.Root.position + new Vector3(0, .56f, 1.45f));
@@ -578,6 +609,26 @@ namespace Nightshift
     {
         public MovingTraffic(DriverRig rig) : base(rig) { }
         public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, Mathf.Max(12, velocity));
+    }
+    public sealed class StaticTraffic : TrafficObstacle
+    {
+        readonly Transform[] hazards = new Transform[2];
+
+        public StaticTraffic(DriverRig rig, NightMaterials art) : base(rig)
+        {
+            for (int i = 0; i < hazards.Length; i++)
+                hazards[i] = NightMaterials.Primitive(Root, PrimitiveType.Cube, "Hazard lamp",
+                    new Vector3((2 * i - 1) * .82f, .59f, -2.14f), new Vector3(.15f,.055f,.043f), art.Marker);
+        }
+
+        public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, 0);
+
+        public override void Tick(float dt, double player)
+        {
+            base.Tick(dt, player);
+            bool flash = Time.unscaledTime % 1.18f < .53f;
+            foreach (var lamp in hazards) lamp.gameObject.SetActive(flash);
+        }
     }
     public abstract class Pickup : Interactable
     {
