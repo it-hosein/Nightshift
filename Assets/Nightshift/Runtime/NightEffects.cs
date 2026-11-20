@@ -171,7 +171,9 @@ namespace Nightshift
             coin = Make("Coin",.32,(t,i) => Math.Sin(Tau*740*t)*Fade(t,.22)*.28 + Math.Sin(Tau*1109*t)*Fade(t-.065,.24)*.33);
             fuel = Make("Refuel",.43,(t,i) => Math.Sin(Tau*392*t)*Fade(t,.21)*.33 + Math.Sin(Tau*698*t)*Fade(t-.07,.33)*.42);
             heart = Make("Recover life",.36,(t,i) => Math.Sin(Tau*523*t)*Fade(t,.18)*.30 + Math.Sin(Tau*784*t)*Fade(t-.072,.26)*.37);
-            engine.volume=0; music.volume=.27f; effects.volume=.58f;
+            engine.volume = 0;
+            music.volume = .48f;
+            effects.volume = .58f;
             engine.Play(); music.Play();
         }
 
