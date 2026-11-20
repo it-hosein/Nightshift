@@ -19,35 +19,3 @@
 ## حالت درسی
 
 برای بررسی شرط خودروی مانع ثابت و نور زیر بدنهٔ وابسته به سرعت، پیش از شروع در منوی اصلی **Course mode** را روشن کنید. اولین مانع ثابت در خط راست و حدود ۲۱۲ متری مسیر قرار دارد و چراغ خطر چشمک‌زن دارد. خودروهای متحرک پشت مانع فاصله می‌گیرند. حالت درسی رکورد مستقل دارد.
-
-## اجرای پروژه در Unity
-
-1. از [صفحهٔ انتشار Unity 2022.3.62f1 LTS](https://unity.com/releases/editor/whats-new/2022.3.62f1) نسخهٔ دقیق را در Unity Hub نصب کنید. اگر Hub درخواست ورود یا فعال‌سازی کرد، از حساب Unity خودتان استفاده کنید.
-2. فایل ZIP اولیه را Extract کنید. در Unity Hub از **Projects → Add → Add project from disk** پوشهٔ `UnityProject` را انتخاب کنید. در این پوشه سه پوشهٔ `Assets`، `Packages` و `ProjectSettings` وجود دارند.
-3. برای نصب Input System و Post Processing در اولین Import به اینترنت نیاز است. پس از Import از **Nightshift → Open Game Scene** استفاده کنید و دکمهٔ **Play** را بزنید.
-4. برای نمایش موارد ارزیابی، **Course mode** را در منوی اصلی روشن کنید و **Start Drive** را بزنید.
-
-## دریافت سورس از GitHub
-
-پوشهٔ اصلی مخزن پروژهٔ Unity است. پس از Push در GitHub از **Code → Download ZIP** یا **Open with GitHub Desktop** استفاده کنید. [مخزن Nightshift](https://github.com/it-hosein/Nightshift)
-
-</div>
-
-```sh
-git clone https://github.com/it-hosein/Nightshift.git
-```
-
-<div dir="rtl" lang="fa">
-
-پوشهٔ `Nightshift` دانلودشده را در Unity Hub باز کنید. بعد از اولین Import، فایل‌های `.meta` و تنظیمات لازمِ تولیدشده را هم در Git ثبت کنید. `.gitignore` پوشه‌های `Library`، `Temp` و `Builds` را کنار می‌گذارد.
-
-## ساخت ZIP نهایی طبق PDF تمرین
-
-1. از حالت Play خارج شوید. برای خروجی Windows، پشتیبانی Windows Build Support را در Unity Hub داشته باشید. منوی **Nightshift → Build Assignment ZIP…** را باز کنید.
-2. نام و نام خانوادگی لاتین، شمارهٔ دانشجویی و پلتفرم مقصد را وارد کنید. URL مخزن GitHub از قبل درج شده است. **Build and save ZIP** را بزنید و پوشهٔ مقصد را انتخاب کنید.
-3. Unity نام فایل را با الگوی `GD_Hw2_[firstName]_[lastName]_[StudentId].zip` می‌سازد. داخل ZIP لینک GitHub در `Repository.txt`، گزارش در `Report.pdf` و فایل اجرایی همراه تمام وابستگی‌هایش در `Build/` است.
-4. ZIP نهایی را در سامانهٔ درس بارگذاری کنید و طبق PDF، فایل ارسال‌شده را دوباره دانلود و سالم‌بودن آن را بررسی کنید. پیش از ارسال می‌توانید کل `Build/` را Extract کنید و `Nightshift.exe` را اجرا کنید.
-
-فایل `Nightshift.html` در بستهٔ اولیه یک پیش‌نمایش مرورگری است. خروجی اجرایی Unity با منوی ساخت ZIP تولید می‌شود. در محیط توسعهٔ فعلی ادیتور فعال Unity در دسترس نبود.
-
-</div>
