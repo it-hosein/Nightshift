@@ -163,8 +163,9 @@ namespace Nightshift
             engine = Source(parent,"Engine loop",true);
             music = Source(parent,"Nightshift soundtrack",true);
             effects = Source(parent,"Driving sound effects",false);
+            double exhaustGain = Math.Pow(10, 6.0 / 20);
             engine.clip = Make("Combustion",1.0,(t, i) => (Math.Sin(t*Tau*38) + .42*Math.Sin(t*Tau*76)
-                + .25*Math.Sin(t*Tau*114) + .14*Math.Sin(t*Tau*190)) * (.45+.22*Math.Sin(t*Tau*19)) * .43);
+                + .25*Math.Sin(t*Tau*114) + .14*Math.Sin(t*Tau*190)) * (.45+.22*Math.Sin(t*Tau*19)) * .43 * exhaustGain);
             music.clip = MakeSoundtrack();
             var random = new System.Random(117);
             crash = Make("Impact",.66,(t, i) => ((random.NextDouble()*2-1)*.42+Math.Sin(Tau*(88*t-55*t*t))*.49)*Math.Exp(-t*10));
