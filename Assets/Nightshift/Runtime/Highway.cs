@@ -179,8 +179,10 @@ namespace Nightshift
                 }
                 if (type == 2)
                 {
-                    foreach (int d in new[] { 12, 84 }) walls.Box(At(d, side * 4.1f, -6.6f), new Vector3(1.6f, 14, 2.7f), Yaw(d));
-                    walls.Box(At(48, side * 6.25f, -.31f), new Vector3(.72f, .67f, 96), Yaw(48));
+                    foreach (int d in new[] { 12, 84 })
+                        walls.Box(At(d, side * 5.85f, -7.5f), new Vector3(1.6f, 14, 2.7f), Yaw(d));
+                    for (int d = 2; d < Route.Length; d += 4)
+                        walls.Box(At(d, side * 6.25f, -.55f), new Vector3(.72f, .67f, 4.06f), Yaw(d));
                     Vector3 crown = At(46, side * 7.1f, 15.8f);
                     walls.Box(At(46, side * 7.1f, 8), new Vector3(.69f, 17.2f, .92f), Yaw(46));
                     cool.Box(At(46, side * 7.1f, 16.6f), new Vector3(.75f, .12f, 1.04f), Yaw(46));

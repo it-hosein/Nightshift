@@ -226,18 +226,17 @@ namespace Nightshift
             var model = player ? art.CarAsset : art.TrafficAssets[(palette - 1) % art.TrafficAssets.Length];
             var car = UnityEngine.Object.Instantiate(model != null ? model : art.CarAsset, shell).transform;
             tailLight = NightMaterials.Lit("Taillight LED", redColor, 3.7f);
-            Transform front = null, rear = null;
+            car.localPosition = Vector3.zero;
+            var renderers = car.GetComponentsInChildren<Renderer>();
             foreach (var t in car.GetComponentsInChildren<Transform>(true))
             {
-                string n = t.name.ToLowerInvariant();
-                if (n == "wheel_fl") front = t;
-                if (n == "wheel_rl") rear = t;
-                if (n == "wheel_fl" || n == "wheel_fr" || n == "wheel_rl" || n == "wheel_rr") wheels.Add(t);
+                if (t.name.Equals("wheel_fl", StringComparison.OrdinalIgnoreCase) ||
+                    t.name.Equals("wheel_fr", StringComparison.OrdinalIgnoreCase) ||
+                    t.name.Equals("wheel_rl", StringComparison.OrdinalIgnoreCase) ||
+                    t.name.Equals("wheel_rr", StringComparison.OrdinalIgnoreCase)) wheels.Add(t);
             }
-            if (front != null && rear != null)
-            {
-                if (front.position.z < rear.position.z) car.localRotation *= Quaternion.Euler(0, 180, 0);
-            }
+            if (model == null || model == art.CarAsset)
+                AlignFerrari(car, renderers);
             else
             {
                 var headlights = car.Find("Headlights");
@@ -246,7 +245,6 @@ namespace Nightshift
                     headlights.GetComponent<Renderer>().bounds.center.z < taillights.GetComponent<Renderer>().bounds.center.z)
                     car.localRotation *= Quaternion.Euler(0, 180, 0);
             }
-            var renderers = car.GetComponentsInChildren<Renderer>();
             Bounds bounds = renderers[0].bounds;
             foreach (var r in renderers)
             {
@@ -291,6 +289,35 @@ namespace Nightshift
                 var light = spot.GetComponent<Light>();
                 light.type = LightType.Spot; light.color = new Color(.66f,.81f,1);
                 light.intensity = 2.43f; light.range = 34; light.spotAngle = 48;
+            }
+        }
+
+        void AlignFerrari(Transform car, Renderer[] renderers)
+        {
+            // Measure the imported car's axes so an FBX import rotation cannot invert the rig.
+            if (wheels.Count != 4) return;
+            Vector3 frontLeft = Vector3.zero, frontRight = Vector3.zero;
+            Vector3 rearLeft = Vector3.zero, rearRight = Vector3.zero;
+            foreach (var wheel in wheels)
+            {
+                switch (wheel.name.ToLowerInvariant())
+                {
+                    case "wheel_fl": frontLeft = wheel.position; break;
+                    case "wheel_fr": frontRight = wheel.position; break;
+                    case "wheel_rl": rearLeft = wheel.position; break;
+                    case "wheel_rr": rearRight = wheel.position; break;
+                }
+            }
+            Vector3 forward = (frontLeft + frontRight) - (rearLeft + rearRight);
+            Vector3 across = (frontRight + rearRight) - (frontLeft + rearLeft);
+            Vector3 up = Vector3.Cross(forward, across);
+            Vector3 axleCenter = (frontLeft + frontRight + rearLeft + rearRight) * .25f;
+            foreach (var renderer in renderers)
+            {
+                if (!renderer.name.Equals("body", StringComparison.OrdinalIgnoreCase)) continue;
+                if (Vector3.Dot(up, renderer.bounds.center - axleCenter) < 0) up = -up;
+                car.rotation = shell.rotation * Quaternion.Inverse(Quaternion.LookRotation(forward, up)) * car.rotation;
+                break;
             }
         }
 
