@@ -240,10 +240,10 @@ namespace Nightshift
             }
             else
             {
-                var lamp = car.Find("Headlights");
-                var stop = car.Find("Taillights");
-                if (lamp != null && stop != null &&
-                    lamp.GetComponent<Renderer>().bounds.center.z < stop.GetComponent<Renderer>().bounds.center.z)
+                var headlights = car.Find("Headlights");
+                var taillights = car.Find("Taillights");
+                if (headlights != null && taillights != null &&
+                    headlights.GetComponent<Renderer>().bounds.center.z < taillights.GetComponent<Renderer>().bounds.center.z)
                     car.localRotation *= Quaternion.Euler(0, 180, 0);
             }
             var renderers = car.GetComponentsInChildren<Renderer>();
