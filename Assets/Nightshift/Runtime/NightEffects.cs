@@ -250,7 +250,7 @@ namespace Nightshift
             float km=speed*3.6f;
             float rpm = Transmission.Revolutions(km, Transmission.GearIndex(km));
             engine.pitch = Mathf.Lerp(engine.pitch, .56f + rpm / 5700, .12f);
-            engine.volume=Mathf.Lerp(engine.volume,active ? throttle ? .57f : .36f : .014f,.12f);
+            engine.volume=Mathf.Lerp(engine.volume,active ? throttle ? .66f : .42f : .014f,.12f);
         }
         public void SetMute(bool value)
         {
