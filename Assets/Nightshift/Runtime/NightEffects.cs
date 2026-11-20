@@ -153,18 +153,21 @@ namespace Nightshift
     public sealed class NightAudio
     {
         const int Rate = 24000;
-        readonly AudioSource engine, music, effects;
-        readonly AudioClip crash, coin, fuel, heart;
-        bool muted;
+        readonly AudioSource engine, boostedExhaust, music, effects;
+        readonly AudioClip nitroBurst, crash, coin, fuel, heart;
+        bool muted, nitroActive;
+        float boostBlend, exhaustGain;
         delegate double Sample(double t, int index);
 
         public NightAudio(Transform parent)
         {
-            engine = Source(parent,"Engine loop",true);
+            engine = Source(parent,"Sports exhaust",true);
+            boostedExhaust = Source(parent,"Nitro exhaust",true);
             music = Source(parent,"Nightshift soundtrack",true);
             effects = Source(parent,"Driving sound effects",false);
-            engine.clip = Make("Combustion",1.0,(t, i) => (Math.Sin(t*Tau*38) + .42*Math.Sin(t*Tau*76)
-                + .25*Math.Sin(t*Tau*114) + .14*Math.Sin(t*Tau*190)) * (.45+.22*Math.Sin(t*Tau*19)) * .43);
+            engine.clip = Make("Sports V8 exhaust", .5, (t, _) => ExhaustSample(t, false));
+            boostedExhaust.clip = Make("Open V8 exhaust under nitro", .5, (t, _) => ExhaustSample(t, true));
+            nitroBurst = Make("Nitro ignition", .42, (t, _) => NitroBurstSample(t));
             music.clip = MakeSoundtrack();
             var random = new System.Random(117);
             crash = Make("Impact",.66,(t, i) => ((random.NextDouble()*2-1)*.42+Math.Sin(Tau*(88*t-55*t*t))*.49)*Math.Exp(-t*10));
@@ -172,14 +175,41 @@ namespace Nightshift
             fuel = Make("Refuel",.43,(t,i) => Math.Sin(Tau*392*t)*Fade(t,.21)*.33 + Math.Sin(Tau*698*t)*Fade(t-.07,.33)*.42);
             heart = Make("Recover life",.36,(t,i) => Math.Sin(Tau*523*t)*Fade(t,.18)*.30 + Math.Sin(Tau*784*t)*Fade(t-.072,.26)*.37);
             engine.volume = 0;
+            boostedExhaust.volume = 0;
             music.volume = .48f;
             effects.volume = .58f;
-            engine.Play(); music.Play();
+            engine.Play();
+            boostedExhaust.Play();
+            music.Play();
         }
 
         const double Tau = Math.PI * 2;
         static double Fade(double t,double length) =>
             t < 0 || t >= length ? 0 : Math.Min(1,t*105) * Math.Pow(1-t/length,2.25);
+
+        // The loops are rendered at 6000 RPM, with four combustion pulses per revolution.
+        static double ExhaustSample(double t, bool nitro)
+        {
+            double crank = Tau * 100 * t;
+            double firing = 4 * crank + .12 * Math.Sin(2 * crank);
+            double pulse = Math.Sin(firing) + .38 * Math.Sin(2 * firing) + .16 * Math.Sin(3 * firing);
+            double rumble = .35 * Math.Sin(2 * crank) + .19 * Math.Sin(crank) + .13 * Math.Sin(3 * crank);
+            if (!nitro)
+                return .65 * Math.Tanh(pulse * .65 + rumble);
+
+            double rasp = .22 * Math.Sin(3 * firing) + .18 * Math.Sin(5 * firing) + .13 * Math.Sin(7 * firing);
+            double whine = .17 * Math.Sin(9 * crank + .2 * Math.Sin(2 * crank));
+            return .72 * Math.Tanh(1.5 * pulse + 1.3 * rumble + rasp + whine);
+        }
+
+        static double NitroBurstSample(double t)
+        {
+            double pop = .63 * Math.Sin(Tau * (154 * t - 190 * t * t)) * Fade(t, .095);
+            double rush = Math.Sin(Tau * (470 * t + 1300 * t * t))
+                * (.42 + .28 * Math.Sin(Tau * 93 * t)) * Fade(t, .42);
+            return pop + rush;
+        }
+
         static AudioClip MakeSoundtrack()
         {
             const double beatDuration = 60.0 / 150;
@@ -244,17 +274,28 @@ namespace Nightshift
             var source=go.GetComponent<AudioSource>(); source.playOnAwake=false; source.loop=loop; source.spatialBlend=0; return source;
         }
 
-        public void Tick(float speed,bool active,bool throttle)
+        public void Tick(float speed, bool active, bool boosting)
         {
-            if (muted) return;
-            float km=speed*3.6f;
+            bool nitro = active && boosting;
+            if (nitro && !nitroActive && !muted)
+                effects.PlayOneShot(nitroBurst, .34f);
+            nitroActive = nitro;
+
+            float dt = Time.unscaledDeltaTime;
+            float mixRate = 1 - Mathf.Exp(-dt * (nitro ? 18 : 12));
+            boostBlend = Mathf.Lerp(boostBlend, nitro ? 1 : 0, mixRate);
+            exhaustGain = Mathf.Lerp(exhaustGain, active ? 1 : .095f, 1 - Mathf.Exp(-dt * 9));
+            float km = speed * 3.6f;
             float rpm = Transmission.Revolutions(km, Transmission.GearIndex(km));
-            engine.pitch = Mathf.Lerp(engine.pitch, .56f + rpm / 5700, .12f);
-            engine.volume=Mathf.Lerp(engine.volume,active ? throttle ? .23f : .145f : .014f,.12f);
+            float pitch = active ? rpm / 6000 * (1 + .17f * boostBlend) : .21f;
+            engine.pitch = boostedExhaust.pitch = Mathf.Lerp(engine.pitch, pitch, 1 - Mathf.Exp(-dt * 13));
+            engine.volume = exhaustGain * (1 - boostBlend) * .26f;
+            boostedExhaust.volume = exhaustGain * boostBlend * .32f;
         }
         public void SetMute(bool value)
         {
-            muted=value; music.mute=engine.mute=effects.mute=value;
+            muted = value;
+            music.mute = engine.mute = boostedExhaust.mute = effects.mute = value;
         }
         public void Crash() { if(!muted) effects.PlayOneShot(crash); }
         public void Pickup(PickupKind kind) { if (!muted) effects.PlayOneShot(kind == PickupKind.Heart ? heart : kind == PickupKind.Fuel ? fuel : coin); }
