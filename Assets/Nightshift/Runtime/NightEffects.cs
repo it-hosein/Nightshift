@@ -153,9 +153,6 @@ namespace Nightshift
     public sealed class NightAudio
     {
         const int Rate = 24000;
-        // Split the +12 dB gain so the samples and AudioSource volume stay within range.
-        const double ExhaustClipGain = 3.4;
-        static readonly float ExhaustVolumeGain = (float)(Math.Pow(10, 12.0 / 20) / ExhaustClipGain);
         readonly AudioSource engine, music, effects;
         readonly AudioClip crash, coin, fuel, heart;
         bool muted;
@@ -166,8 +163,7 @@ namespace Nightshift
             engine = Source(parent,"Engine loop",true);
             music = Source(parent,"Nightshift soundtrack",true);
             effects = Source(parent,"Driving sound effects",false);
-            engine.clip = Make("Combustion",1.0,(t, i) => (Math.Sin(t*Tau*38) + .42*Math.Sin(t*Tau*76)
-                + .25*Math.Sin(t*Tau*114) + .14*Math.Sin(t*Tau*190)) * (.45+.22*Math.Sin(t*Tau*19)) * .43 * ExhaustClipGain);
+            engine.clip = Make("Combustion", 1.0, (t, _) => ExhaustSample(t));
             music.clip = MakeSoundtrack();
             var random = new System.Random(117);
             crash = Make("Impact",.66,(t, i) => ((random.NextDouble()*2-1)*.42+Math.Sin(Tau*(88*t-55*t*t))*.49)*Math.Exp(-t*10));
@@ -181,6 +177,21 @@ namespace Nightshift
         }
 
         const double Tau = Math.PI * 2;
+        static double ExhaustSample(double t)
+        {
+            double phase = t * Tau;
+            double sample = (Math.Sin(phase * 38) + .42 * Math.Sin(phase * 76)
+                + .25 * Math.Sin(phase * 114) + .14 * Math.Sin(phase * 190))
+                * (.45 + .22 * Math.Sin(phase * 19)) * .43;
+
+            // Calibrated to +4 dB RMS over the previous mix with a soft knee for the loudest peaks.
+            sample *= 4.638;
+            const double knee = .84, ceiling = .97;
+            double magnitude = Math.Abs(sample);
+            if (magnitude <= knee) return sample;
+            return Math.Sign(sample) * (knee + (ceiling - knee) * Math.Tanh((magnitude - knee) / (ceiling - knee)));
+        }
+
         static double Fade(double t,double length) =>
             t < 0 || t >= length ? 0 : Math.Min(1,t*105) * Math.Pow(1-t/length,2.25);
         static AudioClip MakeSoundtrack()
@@ -253,8 +264,9 @@ namespace Nightshift
             float km=speed*3.6f;
             float rpm = Transmission.Revolutions(km, Transmission.GearIndex(km));
             engine.pitch = Mathf.Lerp(engine.pitch, .56f + rpm / 5700, .12f);
-            float baseVolume = active ? (throttle ? .66f : .42f) : .014f;
-            engine.volume = Mathf.Lerp(engine.volume, baseVolume * ExhaustVolumeGain, .12f);
+            // Retain the relative levels from the previous driving mix, with nitro at unity.
+            float volume = active ? (throttle ? 1f : .42f / .66f) : .014f / .66f;
+            engine.volume = Mathf.Lerp(engine.volume, volume, .12f);
         }
         public void SetMute(bool value)
         {

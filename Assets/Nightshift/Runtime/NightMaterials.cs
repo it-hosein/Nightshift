@@ -9,6 +9,7 @@ namespace Nightshift
     {
         public readonly Material Asphalt, Markings, Marker, Metal, Concrete, Lamp, ColdLamp, Land, Tree, Water;
         public readonly Material AmberGlow, BlueGlow, RedGlow, HeadGlow, CourseGlow, Shadow, Fire, Sky;
+        public readonly Material TrafficHeadGlow, TrafficHeadlight, TrafficTaillight;
         public readonly Material Gold, GoldDark, Fuel, Rubber, Glass;
         readonly Material heartMaterial;
         readonly Mesh heartMesh;
@@ -48,8 +49,11 @@ namespace Nightshift
             Texture2D halo = RenderHalo();
             AmberGlow = GlowMaterial("Sodium light wash", halo, new Color(1, .58f, .31f, .21f));
             BlueGlow = GlowMaterial("Tunnel light wash", halo, new Color(.55f, .76f, 1, .21f));
-            RedGlow = GlowMaterial("Brake light reflection", halo, new Color(1,.05f,.13f,.31f));
-            HeadGlow = GlowMaterial("Headlight wash", halo, new Color(.64f,.79f,1,.35f));
+            RedGlow = GlowMaterial("Brake light reflection", halo, new Color(1,.05f,.13f,.40f));
+            HeadGlow = GlowMaterial("Headlight wash", halo, new Color(.64f,.79f,1,.36f));
+            TrafficHeadGlow = GlowMaterial("Traffic headlight wash", halo, new Color(.78f,.87f,1,.21f));
+            TrafficHeadlight = Lit("Traffic low beam", new Color(.77f,.86f,1), 2.8f);
+            TrafficTaillight = Lit("Traffic rear running light", new Color(1,.07f,.12f), 5.2f);
             CourseGlow = GlowMaterial("Course cyan underglow", halo, new Color(.40f,.77f,1,.32f));
             Shadow = GlowMaterial("Ground contact shadow", Resources.Load<Texture2D>("Nightshift/CarAO"),
                 new Color(.01f,.019f,.035f,.89f));
@@ -225,7 +229,7 @@ namespace Nightshift
             if (art.CarAsset == null) throw new InvalidOperationException("The imported Ferrari FBX is missing.");
             var model = player ? art.CarAsset : art.TrafficAssets[(palette - 1) % art.TrafficAssets.Length];
             var car = UnityEngine.Object.Instantiate(model != null ? model : art.CarAsset, shell).transform;
-            tailLight = NightMaterials.Lit("Taillight LED", redColor, 3.7f);
+            tailLight = player ? NightMaterials.Lit("Taillight LED", redColor, 3.85f) : art.TrafficTaillight;
             car.localPosition = Vector3.zero;
             var renderers = car.GetComponentsInChildren<Renderer>();
             foreach (var t in car.GetComponentsInChildren<Transform>(true))
@@ -254,7 +258,8 @@ namespace Nightshift
                 else if (n == "glass") r.sharedMaterial = art.Glass;
                 else if (n == "lights_red" || n == "taillights") r.sharedMaterial = tailLight;
                 else if (n == "trim") r.sharedMaterial = art.Rubber;
-                else if (n == "headlights") r.sharedMaterial = NightMaterials.Lit("Headlight housing", new Color(.64f,.76f,1), .8f);
+                else if (!player && (n == "headlights" || n == "lights")) r.sharedMaterial = art.TrafficHeadlight;
+                else if (n == "headlights") r.sharedMaterial = NightMaterials.Lit("Headlight housing", new Color(.64f,.76f,1), .83f);
             }
             float scale = player ? Mathf.Clamp(4.55f / Mathf.Max(.1f, bounds.size.z), .1f, 100) : 1;
             car.localScale *= scale;
@@ -265,7 +270,12 @@ namespace Nightshift
             foreach (int side in Signs.Values)
                 SetGroundGlow(art, tail, "Tail light reflection", .83f * side, .027f, -4.18f, 2.12f, 5.25f);
 
-            if (!player) return;
+            if (!player)
+            {
+                foreach (int side in Signs.Values)
+                    SetGroundGlow(art, art.TrafficHeadGlow, "Traffic headlight reflection", side * .79f, .034f, 6.2f, 3.05f, 11.25f);
+                return;
+            }
             courseGlowMaterial = new Material(art.CourseGlow);
             courseGlow = art.Glow(Root, "Speed-responsive course underglow", courseGlowMaterial);
             courseGlow.localPosition = new Vector3(0,.028f,-.12f);
@@ -288,7 +298,7 @@ namespace Nightshift
                 spot.localRotation = Quaternion.Euler(9, side * 3, 0);
                 var light = spot.GetComponent<Light>();
                 light.type = LightType.Spot; light.color = new Color(.66f,.81f,1);
-                light.intensity = 2.43f; light.range = 34; light.spotAngle = 48;
+                light.intensity = 2.53f; light.range = 34; light.spotAngle = 48;
             }
         }
 
@@ -348,8 +358,8 @@ namespace Nightshift
             shell.localRotation = Quaternion.Euler(pitch,0,roll);
             foreach (var wheel in wheels) wheel.Rotate(Vector3.right, speed * dt / .351f * Mathf.Rad2Deg, Space.Self);
             if (!player) return;
-            tail.color = new Color(1,.04f,.11f,brake ? .72f : .39f);
-            tailLight.SetColor("_EmissionColor", redColor * (brake ? 7.2f : 3.7f));
+            tail.color = new Color(1,.04f,.11f,brake ? .74f : .40f);
+            tailLight.SetColor("_EmissionColor", redColor * (brake ? 7.45f : 3.85f));
         }
     }
 }
