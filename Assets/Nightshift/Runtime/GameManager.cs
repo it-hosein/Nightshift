@@ -5,10 +5,10 @@ using UnityEngine.InputSystem;
 
 namespace Nightshift
 {
-    public enum GameState { Menu, Playing, Paused, GameOver }
+    public enum GameState { Menu, Playing, Paused, GameOver, Garage, Replay }
     public enum PickupKind { Coin, Fuel, Heart }
 
-    public sealed class GameManager : MonoBehaviour
+    public sealed partial class GameManager : MonoBehaviour
     {
         public static GameManager Instance { get; private set; }
         public GameState State { get; private set; }
@@ -27,7 +27,9 @@ namespace Nightshift
         public bool Muted { get; private set; }
 
         public bool CourseMode { get; private set; }
-        string RecordKey => CourseMode ? "nightshift-best-course" : "nightshift-best";
+        string RecordKey => Mode == RunMode.Duel ? "nightshift-best-duel"
+            : Mode == RunMode.TimeTrial ? "nightshift-best-trial-score"
+            : CourseMode ? "nightshift-best-course" : "nightshift-best";
         float score, x, lateral, elapsed, hitTime, toast, cameraX, cameraY, nitroIdle;
         double nextTraffic, nextCoin, nextFuel, nextHeart, nextStatic;
         int lane, record, spawnIndex;
@@ -66,7 +68,12 @@ namespace Nightshift
             record = PlayerPrefs.GetInt(RecordKey, 0);
             DynamicGI.UpdateEnvironment();
             highway = new Highway(transform, art);
-            driver = new DriverRig(playerRig, art, true, 0);
+            expansion = Resources.Load<DrivingExpansion>("Nightshift/DrivingExpansion");
+            if (expansion == null || expansion.vehicles.Length == 0)
+                throw new InvalidOperationException("The Nightshift driving catalog is missing.");
+            var savedVehicle = PlayerPrefs.GetString("nightshift-garage");
+            vehicleIndex = Mathf.Max(0, Array.FindIndex(expansion.vehicles, v => v.id == savedVehicle));
+            driver = new DriverRig(playerRig, art, true, Vehicle.paint, Vehicle);
             cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(i, false), item => !item.Active);
             moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(i + 2, true), item => !item.Active);
             stationary = new ObjectPool<TrafficObstacle>(3, i =>
@@ -76,7 +83,9 @@ namespace Nightshift
             hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(Instantiate(art.Heart, transform).transform), item => !item.Active);
             effects = new NightParticles(transform, art, driver.ExhaustMount);
             fireworks = new SkyFireworks(transform);
-            audioRig = new NightAudio(engine, music, soundEffects, collisionClip, coinClip, fuelClip, heartClip);
+            audioRig = new NightAudio(engine, music, soundEffects, collisionClip, coinClip, fuelClip, heartClip,
+                expansion.audioMixer, expansion.passBy, transform);
+            PrepareModes();
             CreateActions();
             hud = new GameHud(this);
             Change(GameState.Menu);
@@ -115,18 +124,25 @@ namespace Nightshift
 
         public void StartRun()
         {
-            CommitScore(); ResetRun(); Change(GameState.Playing);
+            if (State == GameState.Menu) StartMode(RunMode.Endless);
+            else RestartMode();
         }
 
         public void ToMenu()
         {
-            CommitScore(); Change(GameState.Menu); ResetRun();
+            CommitScore();
+            Mode = RunMode.Endless;
+            record = PlayerPrefs.GetInt(RecordKey, 0);
+            Change(GameState.Menu);
+            ResetRun();
         }
 
         public void TogglePause()
         {
             if (State == GameState.Playing) { CommitScore(); Change(GameState.Paused); }
             else if (State == GameState.Paused) Change(GameState.Playing);
+            else if (State == GameState.Garage) Change(GameState.Menu);
+            else if (State == GameState.Replay) StopReplay();
         }
 
         public void ToggleMute()
@@ -152,7 +168,8 @@ namespace Nightshift
             State = state;
             if (state == GameState.Playing) driving.Enable();
             else driving.Disable();
-            effects.SetPaused(state == GameState.Paused || state == GameState.GameOver);
+            effects.SetPaused(state == GameState.Paused || state == GameState.GameOver || state == GameState.Replay);
+            audioRig.SetReplay(state == GameState.Replay);
             hud.Refresh();
         }
 
@@ -171,22 +188,29 @@ namespace Nightshift
             effects.Clear();
             fireworks.Reset();
             hud.SetImpact(0);
-            moving.Take().Spawn(98, -1, 19);
-            cruising.Take().Spawn(136, 1, 17);
-            if (CourseMode) stationary.Take().Spawn(212, 1);
-            for (int i = 0; i < 3; i++) coins.Take().Spawn(73 + i * 6, 0);
+            ResetModes();
+            if (Mode != RunMode.TimeTrial) moving.Take().Spawn(98, -1, 19);
+            if (Mode != RunMode.TimeTrial) cruising.Take().Spawn(136, 1, 17);
+            if (CourseMode && Mode == RunMode.Endless) stationary.Take().Spawn(212, 1);
+            if (Mode != RunMode.TimeTrial) for (int i = 0; i < 3; i++) coins.Take().Spawn(73 + i * 6, 0);
             highway.Update(Distance);
             Position(0);
             UpdateItems(0, 0, 0, false);
+            replay.Capture(0, 0);
             hud.Tick();
         }
 
         void Update()
         {
             float dt = Mathf.Min(Time.unscaledDeltaTime, .11f);
-            if (State == GameState.Menu)
+            if (State == GameState.Menu || State == GameState.Garage)
             {
                 Position(dt); audioRig.Tick(Speed, false, false); return;
+            }
+            if (State == GameState.Replay)
+            {
+                if (!replay.Tick(dt)) StopReplay();
+                return;
             }
             if (State != GameState.Playing)
             {
@@ -201,6 +225,7 @@ namespace Nightshift
                 effects.Exhaust(dt, elapsed, Speed, boosting && !braking);
                 fireworks.Update(elapsed, Distance, Speed);
             }
+            if (State == GameState.Playing) replay.Capture(elapsed, Distance);
             audioRig.Tick(Speed, State == GameState.Playing, boosting);
             hud.Tick();
         }
@@ -209,13 +234,14 @@ namespace Nightshift
         {
             double old = Distance;
             float oldX = x;
+            if (Mode == RunMode.Duel) dt = Mathf.Min(dt, expansion.duelDuration - elapsed);
             elapsed += dt;
             bool requested = throttle.IsPressed();
             braking = brake.IsPressed();
             boosting = requested && !braking && Nitro > 0;
             if (boosting)
             {
-                Nitro = Mathf.Max(0, Nitro - 20 * dt);
+                Nitro = Mathf.Max(0, Nitro - Vehicle.nitroUse * dt);
                 nitroIdle = 0;
             }
             else if (!requested)
@@ -224,24 +250,29 @@ namespace Nightshift
                 if (nitroIdle >= 2.5f) Nitro = Mathf.Min(100, Nitro + 7 * dt);
             }
             float cruise = Mathf.Lerp(35.55f, 62, Mathf.Clamp01((float)Distance / 13000 + elapsed / 310));
-            float goal = braking ? 21 : boosting ? 88 : cruise;
-            Speed += (goal - Speed) * (braking ? 1.48f : boosting ? .43f : .31f) * dt;
+            if (Mode == RunMode.Duel) cruise = Mathf.Max(cruise, 48);
+            if (Mode == RunMode.TimeTrial) cruise = 45;
+            float goal = braking ? 21 : boosting ? Vehicle.topSpeed : cruise;
+            Speed += (goal - Speed) * (braking ? Vehicle.braking : boosting ? Vehicle.acceleration : .31f) * dt;
             Distance += Speed * (double)dt;
             score += Speed * dt * .68f;
-            Fuel = Mathf.Max(0, Fuel - dt * (1.02f + Speed * .009f + (boosting ? .31f : 0)));
+            float endurance = Mode == RunMode.Endless ? 1 : Mode == RunMode.Duel ? .53f : 0;
+            Fuel = Mathf.Max(0, Fuel - dt * endurance * (1.02f + Speed * .009f + (boosting ? .31f : 0)));
             hitTime = Mathf.Max(0, hitTime - 1.66f * dt);
             toast = Mathf.Max(0, toast - dt);
-            lateral += ((lane * Route.Lane - x) * 64 - lateral * 13) * dt;
+            float handling = Vehicle.handling;
+            lateral += ((lane * Route.Lane - x) * handling - lateral * (13 * Mathf.Sqrt(handling / 64))) * dt;
             x += lateral * dt;
             if (Fuel <= 0) { End("Out of fuel"); return; }
-            SpawnRows();
+            if (Mode != RunMode.TimeTrial) SpawnRows();
             UpdateItems(dt, old, oldX, true);
+            if (State == GameState.Playing) AdvanceModes(dt, old, oldX);
         }
 
         void SpawnRows()
         {
             float pressure = Mathf.Clamp01(elapsed / 180 + (float)Distance / 22000);
-            if (CourseMode && Distance + 335 >= nextStatic)
+            if (CourseMode && Mode == RunMode.Endless && Distance + 335 >= nextStatic)
             {
                 double at = nextStatic;
                 if (Route.Zone((int)(at / Route.Length)) != 1)
@@ -327,16 +358,20 @@ namespace Nightshift
         void UpdateItems(float dt, double old, float oldX, bool collide)
         {
             trafficOrder.Clear();
-            foreach (var car in cruising.Items) if (car.Active) trafficOrder.Add(car);
-            foreach (var car in moving.Items) if (car.Active) trafficOrder.Add(car);
-            foreach (var car in stationary.Items) if (car.Active) trafficOrder.Add(car);
-            trafficOrder.Sort((a, b) => b.Distance.CompareTo(a.Distance));
-            Array.Clear(laneLeaders, 0, laneLeaders.Length);
-            foreach (var car in trafficOrder)
+            if (Mode == RunMode.TimeTrial) PlaceTrialTraffic(dt);
+            else
             {
-                int index = car.Lane + 1;
-                car.Follow(dt, Distance, laneLeaders[index]);
-                if (car.Active) laneLeaders[index] = car;
+                foreach (var car in cruising.Items) if (car.Active) trafficOrder.Add(car);
+                foreach (var car in moving.Items) if (car.Active) trafficOrder.Add(car);
+                foreach (var car in stationary.Items) if (car.Active) trafficOrder.Add(car);
+                trafficOrder.Sort((a, b) => b.Distance.CompareTo(a.Distance));
+                Array.Clear(laneLeaders, 0, laneLeaders.Length);
+                foreach (var car in trafficOrder)
+                {
+                    int index = car.Lane + 1;
+                    car.Follow(dt, Distance, laneLeaders[index]);
+                    if (car.Active) laneLeaders[index] = car;
+                }
             }
             if (collide)
             {
@@ -347,7 +382,7 @@ namespace Nightshift
                     CheckContact(car, before, after, oldX);
                     if (car.Active && State == GameState.Playing && !car.Passed && before >= 0 && after < 0)
                     {
-                        car.Passed = true; score += 32;
+                        car.Passed = true; RegisterPass(car.Lane, false, car.VisualRoot.position);
                     }
                 }
             }
@@ -379,12 +414,22 @@ namespace Nightshift
         {
             float height = Route.Height(Distance);
             driver.Root.localPosition = new Vector3(Route.Center(Distance) + x, height + .034f, 0);
-            driver.Root.localRotation = Quaternion.Euler(0, Route.Yaw(Distance) + Mathf.Clamp(lateral * 1.26f, -11, 11), 0);
+            driver.Root.localRotation = Quaternion.Euler(0, Route.Yaw(Distance) + Heading, 0);
             driver.Drive(Speed, lateral, boosting, braking, State == GameState.Playing ? dt : 0);
-            driver.SetCourseUnderglow(CourseMode, Speed);
+            driver.SetCourseUnderglow(CourseMode && Mode == RunMode.Endless && State != GameState.Garage, Speed);
             float flex = 1 - Mathf.Exp(-dt * 5);
             cameraX = Mathf.Lerp(cameraX, x * .62f, flex);
             cameraY = Mathf.Lerp(cameraY, height, dt <= 0 ? 1 : 1 - Mathf.Exp(-dt * 8));
+            if (State == GameState.Garage)
+            {
+                float angle = .86f + Mathf.Sin(Time.unscaledTime * .43f) * .28f;
+                var car = driver.Root.position;
+                chase.transform.position = car + new Vector3(Mathf.Sin(angle) * 7, 2.4f, Mathf.Cos(angle) * 7);
+                Vector3 right = Vector3.Cross(Vector3.up, car - chase.transform.position).normalized;
+                chase.transform.LookAt(car - right * 2.2f + Vector3.up * .58f);
+                chase.fieldOfView = 48;
+                return;
+            }
             if (State == GameState.Menu)
             {
                 float t = Time.unscaledTime;
@@ -396,13 +441,15 @@ namespace Nightshift
             chase.transform.localPosition = new Vector3(Route.Center(Distance) + .66f + cameraX + Mathf.Sin(elapsed * 113) * wobble,
                 cameraY + 3.31f + Mathf.Sin(elapsed * 83) * wobble, -8.5f - Speed * .025f);
             chase.transform.LookAt(new Vector3(Route.Center(Distance + 18) + cameraX * .86f, Route.Height(Distance + 18) + .81f, 17.8f));
-            float fov = 53 + (Speed - 30) * .235f;
+            float fov = 53 + (Speed - 30) * .235f + (boosting ? expansion.boostFov : 0);
             chase.fieldOfView = dt <= 0 ? fov : Mathf.Lerp(chase.fieldOfView, fov, flex);
             hud.SetImpact(wobble);
         }
 
         public void Impact()
         {
+            combo = 0;
+            comboUntil = 0;
             Lives--; Speed = Mathf.Max(22, Speed * .68f); hitTime = .67f;
             Message = "COLLISION"; toast = 1.4f;
             effects.Crash(driver.Root.position + new Vector3(0, .56f, 1.45f));
@@ -433,7 +480,7 @@ namespace Nightshift
 
         void End(string reason)
         {
-            EndReason = reason; CommitScore(); Change(GameState.GameOver);
+            EndReason = reason; replay.Seal(); CommitScore(); Change(GameState.GameOver);
         }
 
         void CommitScore()
@@ -456,6 +503,8 @@ namespace Nightshift
                 inputInstance.Disable();
                 Destroy(inputInstance);
             }
+            hud?.Dispose();
+            replay?.Dispose();
             Instance = null;
         }
     }
@@ -463,7 +512,8 @@ namespace Nightshift
     public abstract class Interactable
     {
         protected readonly Transform Root;
-        public double Distance { get; private set; }
+        public Transform VisualRoot => Root;
+        public double Distance { get; protected set; }
         public int Lane { get; private set; }
         protected float Velocity;
         protected float Spin;
@@ -496,11 +546,20 @@ namespace Nightshift
         readonly DriverRig rig;
         float cruise;
         public double PreviousDistance { get; private set; }
+        public float TrafficSpeed => Velocity;
         public bool Passed;
         protected TrafficObstacle(DriverRig rig) : base(rig.Root) { this.rig = rig; }
         protected override float Height => .034f;
         public override float Length => 3.97f;
         public override float Width => 1.77f;
+        public void SetTrialPose(double distance, double player, float dt)
+        {
+            PreviousDistance = Distance;
+            Distance = distance;
+            Tick(0, player);
+            if (Active) rig.Drive(Velocity, 0, false, false, dt);
+        }
+
         public void Follow(float dt, double player, TrafficObstacle leader)
         {
             PreviousDistance = Distance;

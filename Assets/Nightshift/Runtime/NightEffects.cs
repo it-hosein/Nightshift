@@ -151,11 +151,15 @@ namespace Nightshift
     public sealed class NightAudio
     {
         readonly AudioSource engine, music, effects;
-        readonly AudioClip crash, coin, fuel, heart;
+        readonly AudioClip crash, coin, fuel, heart, whoosh;
+        readonly AudioSource[] passSources = new AudioSource[3];
+        readonly UnityEngine.Audio.AudioMixerSnapshot driveMix, replayMix;
+        int passIndex;
         bool muted;
 
         public NightAudio(AudioSource engine, AudioSource music, AudioSource effects,
-            AudioClip crash, AudioClip coin, AudioClip fuel, AudioClip heart)
+            AudioClip crash, AudioClip coin, AudioClip fuel, AudioClip heart,
+            UnityEngine.Audio.AudioMixer mixer, AudioClip whoosh, Transform root)
         {
             this.engine = engine;
             this.music = music;
@@ -164,8 +168,50 @@ namespace Nightshift
             this.coin = coin;
             this.fuel = fuel;
             this.heart = heart;
+            this.whoosh = whoosh;
+            engine.outputAudioMixerGroup = Group(mixer, "Engine");
+            music.outputAudioMixerGroup = Group(mixer, "Music");
+            effects.outputAudioMixerGroup = Group(mixer, "Effects");
+            driveMix = mixer.FindSnapshot("Driving");
+            replayMix = mixer.FindSnapshot("Replay");
+            for (int i = 0; i < passSources.Length; i++)
+            {
+                var source = new GameObject("Traffic pass " + (i + 1)).AddComponent<AudioSource>();
+                source.transform.SetParent(root, false);
+                source.playOnAwake = false;
+                source.spatialBlend = 1;
+                source.dopplerLevel = 0;
+                source.minDistance = 2;
+                source.maxDistance = 36;
+                source.rolloffMode = AudioRolloffMode.Linear;
+                source.outputAudioMixerGroup = effects.outputAudioMixerGroup;
+                passSources[i] = source;
+            }
             engine.Play();
             music.Play();
+        }
+
+        static UnityEngine.Audio.AudioMixerGroup Group(UnityEngine.Audio.AudioMixer mixer, string name)
+        {
+            var groups = mixer.FindMatchingGroups(name);
+            foreach (var group in groups)
+                if (group.name == name) return group;
+            throw new System.InvalidOperationException("Missing audio mixer bus: " + name);
+        }
+
+        public void SetReplay(bool active)
+        {
+            (active ? replayMix : driveMix)?.TransitionTo(.23f);
+            if (active) engine.volume = .25f;
+        }
+
+        public void Pass(Vector3 point, float speed)
+        {
+            if (muted) return;
+            var source = passSources[passIndex++ % passSources.Length];
+            source.transform.position = point;
+            source.pitch = Mathf.Lerp(.82f, 1.23f, Mathf.InverseLerp(28, 88, speed));
+            source.PlayOneShot(whoosh, Mathf.Lerp(.48f, .86f, Mathf.InverseLerp(28, 88, speed)));
         }
 
         public void Tick(float speed,bool active,bool throttle)
@@ -180,7 +226,9 @@ namespace Nightshift
         }
         public void SetMute(bool value)
         {
-            muted=value; music.mute=engine.mute=effects.mute=value;
+            muted = value;
+            music.mute = engine.mute = effects.mute = value;
+            foreach (var source in passSources) source.mute = value;
         }
         public void Crash() { if(!muted) effects.PlayOneShot(crash); }
         public void Pickup(PickupKind kind) { if (!muted) effects.PlayOneShot(kind == PickupKind.Heart ? heart : kind == PickupKind.Fuel ? fuel : coin); }

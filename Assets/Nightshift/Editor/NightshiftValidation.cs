@@ -5,6 +5,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.UIElements;
 
 namespace Nightshift.EditorTools
 {
@@ -69,8 +70,7 @@ namespace Nightshift.EditorTools
                         $"A material is missing from {path}.");
                 }
 
-                foreach (string model in new[] { "Car", "Porsche", "Lamborghini", "Bugatti", "BMW" })
-                    Require(Resources.Load<GameObject>("Nightshift/" + model) != null, $"Missing vehicle model {model}.");
+                ValidateExpansion();
 
                 Debug.Log("Nightshift scene and asset references validated.");
             }
@@ -78,6 +78,46 @@ namespace Nightshift.EditorTools
             {
                 EditorSceneManager.ClosePreviewScene(scene);
             }
+        }
+
+        static void ValidateExpansion()
+        {
+            var expansion = Resources.Load<DrivingExpansion>("Nightshift/DrivingExpansion");
+            Require(expansion != null, "The driving expansion catalog could not be imported.");
+            var cars = expansion.vehicles;
+            Require(cars != null && cars.Length >= 6 && cars.All(c => c != null)
+                && cars.Select(c => c.id).Distinct().Count() == cars.Length, "Assign six distinct vehicle profiles.");
+            foreach (var car in cars)
+            {
+                var model = Resources.Load<GameObject>("Nightshift/" + car.resourceName);
+                Require(model != null && model.GetComponentsInChildren<Renderer>(true).Length > 0,
+                    $"No imported renderers for {car.DisplayName}.");
+                Require(car.nitroUse > 0 && car.handling > 0 && car.braking > 0 && car.topSpeed > 70,
+                    $"Invalid driving parameters for {car.DisplayName}.");
+            }
+            Require(expansion.rivals != null && expansion.rivals.Length >= 2
+                && expansion.rivals.All(r => r != null && r.vehicle != null && r.reactionTime > 0 && r.foresight > r.clearance),
+                "Assign a usable profile for each duel rival.");
+            var audio = expansion.audioMixer;
+            Require(audio != null && expansion.passBy != null && audio.FindSnapshot("Driving") != null
+                && audio.FindSnapshot("Replay") != null, "The driving audio mixer or pass clip is missing.");
+            foreach (string bus in new[] { "Engine", "Music", "Effects" })
+                Require(audio.FindMatchingGroups(bus).Any(g => g.name == bus), $"Missing audio mixer bus: {bus}.");
+            Require(expansion.ghostMaterial != null && expansion.ghostMaterial.shader != null
+                && !ShaderUtil.ShaderHasError(expansion.ghostMaterial.shader), "The ghost shader failed to import.");
+            Require(expansion.replayShots != null && expansion.replayShots.transform.Find("Wheel") != null
+                && expansion.replayShots.transform.Find("Roadside") != null, "Missing replay camera anchors.");
+
+            const string garage = "Nightshift/Garage/";
+            var layout = Resources.Load<VisualTreeAsset>(garage + "Garage");
+            Require(layout != null && Resources.Load<StyleSheet>(garage + "GarageStyle") != null
+                && Resources.Load<ThemeStyleSheet>(garage + "GarageTheme") != null, "The Garage UI Toolkit assets are missing.");
+            var tree = layout.CloneTree();
+            Require(tree.Q<Button>("done") != null && tree.Q<VisualElement>("vehicles") != null,
+                "The garage layout is missing its buttons.");
+            foreach (string stat in new[] { "Speed", "Maneuver", "Nitro", "Brake" })
+                Require(tree.Q<VisualElement>(stat + "-fill") != null && tree.Q<Label>(stat + "-value") != null,
+                    $"The garage layout is missing the {stat} stat bar.");
         }
 
         static void Require(bool condition, string message)

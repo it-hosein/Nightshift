@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d069e3dc93a849a55e414863f82c27d8, type: 3}
+  m_Name: Driving Expansion
+  m_EditorClassIdentifier:
+  vehicles:
+  - {fileID: 11400000, guid: ba7ef44cffadcbdb2ffc4e474402a991, type: 2}
+  - {fileID: 11400000, guid: c03c0f2c2cd7699615442c4c70d4a52f, type: 2}
+  - {fileID: 11400000, guid: 10430a55f1d447dd066409cbe41e8a7f, type: 2}
+  - {fileID: 11400000, guid: fbe0be9f6d31dbbd734106ca39e0f8cc, type: 2}
+  - {fileID: 11400000, guid: 624084cd83ca2e09eae684bd9074f3d9, type: 2}
+  - {fileID: 11400000, guid: debc137b4c738cb279bfb5acf4287521, type: 2}
+  rivals:
+  - name: Vesper
+    vehicle: {fileID: 11400000, guid: 624084cd83ca2e09eae684bd9074f3d9, type: 2}
+    pace: 49
+    foresight: 41
+    reactionTime: 0.5
+    clearance: 12
+  - name: Redline
+    vehicle: {fileID: 11400000, guid: c03c0f2c2cd7699615442c4c70d4a52f, type: 2}
+    pace: 52
+    foresight: 30
+    reactionTime: 0.24
+    clearance: 8
+  ghostMaterial: {fileID: 2100000, guid: 8ceeb3d8b9816ba64a29c19c8f7cf667, type: 2}
+  passBy: {fileID: 8300000, guid: 07d409ed4f453fef73086b9c4956ee56, type: 3}
+  audioMixer: {fileID: 24100000, guid: 26924adb89e34d9f068c4bebba0a303d, type: 2}
+  replayShots: {fileID: 100001, guid: 3bb657c310958e3dfdb9bca82c5ee4b3, type: 3}
+  duelDuration: 90
+  trialDistance: 2400
+  draftCharge: 13
+  comboWindow: 5
+  boostFov: 5

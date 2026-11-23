@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60b6d1fdb48e8801c1bcf4187bce45b7, type: 3}
+  m_Name: Porsche 911 Carrera 4S
+  m_EditorClassIdentifier:
+  id: "911"
+  maker: "Porsche"
+  model: "911 Carrera 4S"
+  description: "The quickest lane changes. Feels at home in dense traffic and close passes."
+  resourceName: "Porsche"
+  paint: 5
+  topSpeed: 83
+  acceleration: 0.52
+  handling: 89
+  nitroUse: 18
+  braking: 2.12

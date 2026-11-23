@@ -1,0 +1,22 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="garage" class="garage">
+        <ui:VisualElement class="garage-card">
+            <ui:Label text="NIGHTSHIFT GARAGE" class="overline" />
+            <ui:Label name="maker" class="maker" />
+            <ui:Label name="model" class="model" />
+            <ui:Label name="description" class="description" />
+            <ui:VisualElement name="vehicles" class="vehicle-grid" />
+            <ui:VisualElement class="statistics">
+                <ui:VisualElement class="stat-heading"><ui:Label text="TOP SPEED" /><ui:Label name="Speed-value" class="value" /></ui:VisualElement>
+                <ui:VisualElement class="track"><ui:VisualElement name="Speed-fill" class="fill speed" /></ui:VisualElement>
+                <ui:VisualElement class="stat-heading"><ui:Label text="MANEUVERABILITY" /><ui:Label name="Maneuver-value" class="value" /></ui:VisualElement>
+                <ui:VisualElement class="track"><ui:VisualElement name="Maneuver-fill" class="fill maneuver" /></ui:VisualElement>
+                <ui:VisualElement class="stat-heading"><ui:Label text="NITRO DURATION" /><ui:Label name="Nitro-value" class="value" /></ui:VisualElement>
+                <ui:VisualElement class="track"><ui:VisualElement name="Nitro-fill" class="fill nitro" /></ui:VisualElement>
+                <ui:VisualElement class="stat-heading"><ui:Label text="BRAKING" /><ui:Label name="Brake-value" class="value" /></ui:VisualElement>
+                <ui:VisualElement class="track"><ui:VisualElement name="Brake-fill" class="fill brake" /></ui:VisualElement>
+            </ui:VisualElement>
+            <ui:Button name="done" text="RETURN TO MAIN MENU" class="primary-action" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

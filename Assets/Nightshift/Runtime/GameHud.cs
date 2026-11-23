@@ -15,7 +15,10 @@ namespace Nightshift
         readonly Font font;
         readonly Canvas canvas;
         readonly RectTransform screen;
-        readonly RectTransform menu, paused, ended, drive;
+        readonly RectTransform menu, paused, ended, drive, replay;
+        readonly GaragePanel garage;
+        readonly Text eventTitle, eventDetail, draftStatus, selectedCar;
+        readonly Button replayAction, replayExit;
         readonly Text score, best, km, speed, route, life, fuelNumber, nitroNumber, nitroLabel, gear, toast, finalReason, finalResult, mute, courseMode;
         readonly Image fuelFill, nitroFill, impact;
         readonly Image[] tach = new Image[18];
@@ -28,6 +31,7 @@ namespace Nightshift
         public GameHud(GameManager game)
         {
             this.game = game;
+            garage = new GaragePanel(game);
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var canvasObject = new GameObject("Nightshift HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(game.transform, false);
@@ -89,6 +93,13 @@ namespace Nightshift
             gear = Label(drive,"3",bottomRight,new Vector2(-93,80),new Vector2(54,40),31,Type,TextAnchor.MiddleCenter,FontStyle.Bold);
             toast = Label(drive,"",new Vector2(.5f,0),new Vector2(0,162),new Vector2(420,36),22,Accent,TextAnchor.MiddleCenter,FontStyle.Bold);
 
+            eventTitle = Label(drive, "", new Vector2(.5f,1), new Vector2(0,-113),
+                new Vector2(460,31), 24, Type, TextAnchor.MiddleCenter, FontStyle.Bold);
+            eventDetail = Label(drive, "", new Vector2(.5f,1), new Vector2(0,-146),
+                new Vector2(510,24), 17, Accent, TextAnchor.MiddleCenter);
+            draftStatus = Label(drive, "", new Vector2(.5f,0), new Vector2(0,200),
+                new Vector2(500,27), 18, Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+
             menu = Panel("Main menu");
             Label(menu,"MOUNTAIN ROUTE   /   00:42 AM",new Vector2(0,.5f),new Vector2(305,169),new Vector2(418,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
             Label(menu,"NIGHTSHIFT",new Vector2(0,.5f),new Vector2(490,88),new Vector2(792,127),111,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
@@ -96,12 +107,15 @@ namespace Nightshift
             Label(menu,"Thread through midnight traffic. Collect coins,\nrefuel on the move and keep the run alive.",new Vector2(0,.5f),
                 new Vector2(365,-55),new Vector2(526,68),21,Muted,TextAnchor.MiddleLeft);
             mainAction = Action(menu,"START DRIVE",new Vector2(0,.5f),new Vector2(201,-132),new Vector2(198,53),true,game.StartRun);
-            Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(372,-132),new Vector2(124,53),false,game.Exit);
-            var course = Action(menu,"COURSE MODE", new Vector2(0,.5f),new Vector2(522,-132),new Vector2(152,53),false,game.ToggleCourseMode);
+            Action(menu,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(411,-132),new Vector2(198,53),false,game.StartDuel);
+            Action(menu,"TIME TRIAL",new Vector2(0,.5f),new Vector2(621,-132),new Vector2(198,53),false,game.StartTimeTrial);
+            Action(menu,"GARAGE",new Vector2(0,.5f),new Vector2(201,-196),new Vector2(198,53),false,game.OpenGarage);
+            var course = Action(menu,"COURSE MODE", new Vector2(0,.5f),new Vector2(411,-196),new Vector2(198,53),false,game.ToggleCourseMode);
+            Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(621,-196),new Vector2(198,53),false,game.Exit);
             courseMode = course.GetComponentInChildren<Text>();
             Label(menu,"A / D   CHANGE LANES     W   NITRO     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
                 new Vector2(632,30),16,Muted,TextAnchor.MiddleLeft);
-            Label(menu,"FERRARI 458 ITALIA",new Vector2(1,0),new Vector2(-245,62),new Vector2(370,45),32,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
+            selectedCar = Label(menu,"",new Vector2(1,0),new Vector2(-285,62),new Vector2(500,45),28,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
 
             paused = Panel("Pause menu");
             Label(paused,"RUN SUSPENDED",new Vector2(0,.5f),new Vector2(303,98),new Vector2(408,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
@@ -116,6 +130,12 @@ namespace Nightshift
             finalResult = Label(ended,"",new Vector2(0,.5f),new Vector2(388,-54),new Vector2(580,39),24,Muted,TextAnchor.MiddleLeft);
             restartAction = Action(ended,"DRIVE AGAIN",new Vector2(0,.5f),new Vector2(188,-120),new Vector2(181,53),true,game.StartRun);
             Action(ended,"MAIN MENU",new Vector2(0,.5f),new Vector2(373,-120),new Vector2(168,53),false,game.ToMenu);
+            replayAction = Action(ended,"WATCH REPLAY",new Vector2(0,.5f),new Vector2(558,-120),new Vector2(183,53),false,game.StartReplay);
+            replay = Full("Replay overlay", screen);
+            Label(replay, "OVERTAKE REPLAY", new Vector2(.5f,1), new Vector2(0,-55),
+                new Vector2(435,38), 28, Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            replayExit = Action(replay, "SKIP REPLAY", new Vector2(1,0), new Vector2(-160,60),
+                new Vector2(164,52), false, game.StopReplay);
 
             Label(screen,"///   N I G H T S H I F T",new Vector2(0,1),new Vector2(223,-45),new Vector2(354,36),21,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
             var muteButton = Action(screen,"SOUND ON",new Vector2(1,1),new Vector2(-187,-46),new Vector2(125,46),false,game.ToggleMute);
@@ -127,6 +147,9 @@ namespace Nightshift
         {
             GameState state = game.State;
             menu.gameObject.SetActive(state == GameState.Menu);
+            replay.gameObject.SetActive(state == GameState.Replay);
+            replayAction.gameObject.SetActive(game.HasReplay);
+            selectedCar.text = game.Vehicle.DisplayName.ToUpperInvariant();
             paused.gameObject.SetActive(state == GameState.Paused);
             ended.gameObject.SetActive(state == GameState.GameOver);
             drive.gameObject.SetActive(state == GameState.Playing || state == GameState.Paused);
@@ -138,8 +161,10 @@ namespace Nightshift
                 if (state == GameState.Menu) input.SetSelectedGameObject(mainAction.gameObject);
                 else if (state == GameState.Paused) input.SetSelectedGameObject(resumeAction.gameObject);
                 else if (state == GameState.GameOver) input.SetSelectedGameObject(restartAction.gameObject);
+                else if (state == GameState.Replay) input.SetSelectedGameObject(replayExit.gameObject);
                 else input.SetSelectedGameObject(null);
             }
+            garage.Refresh(state == GameState.Garage);
             refreshed = true; previous = state;
             Tick();
         }
@@ -149,7 +174,11 @@ namespace Nightshift
             if (game.State == GameState.GameOver)
             {
                 finalReason.text = game.EndReason.ToUpperInvariant();
-                finalResult.text = $"SCORE   {game.Score:0000}        BEST   {game.Best:0000}        {game.Distance / 1000:0.00} KM";
+                finalResult.text = game.Mode == RunMode.TimeTrial
+                    ? $"TIME  {game.RunTime:0.00}s       BEST  {(game.HasGhost ? game.TrialBest.ToString("0.00") + "s" : "--")}"
+                    : game.Mode == RunMode.Duel
+                        ? $"{game.RivalName.ToUpperInvariant()}  {game.RivalGap:+0.0;-0.0;0.0} M       SCORE  {game.Score:0000}"
+                        : $"SCORE   {game.Score:0000}        BEST   {game.Best:0000}        {game.Distance / 1000:0.00} KM";
             }
             score.text = game.Score.ToString("0000"); best.text = game.Best.ToString("0000");
             km.text = (game.Distance / 1000).ToString("0.00");
@@ -172,7 +201,15 @@ namespace Nightshift
             nitroFill.rectTransform.sizeDelta = new Vector2(252 * game.Nitro / 100, 8);
             toast.gameObject.SetActive(game.MessageVisible);
             toast.text = game.Message;
+            eventTitle.text = game.Mode == RunMode.Duel ? $"MIDNIGHT DUEL   {Mathf.CeilToInt(game.TimeLeft):00}s"
+                : game.Mode == RunMode.TimeTrial ? $"TIME TRIAL   {game.RunTime:0.00}s" : "";
+            eventDetail.text = game.Mode == RunMode.Duel ? $"{game.RivalName.ToUpperInvariant()}    {game.RivalGap:+0;-0;0} M"
+                : game.Mode == RunMode.TimeTrial ? $"{game.Distance / 1000:0.00}/{game.TrialLength / 1000:0.00} KM"
+                    + (game.HasGhost ? $"    GHOST {game.GhostDelta:+0.0;-0.0;0.0}s" : "    SET YOUR FIRST GHOST") : "";
+            draftStatus.text = game.Drafting ? "SLIPSTREAM   •   NITRO RECHARGING" : game.Combo > 1 ? $"CLEAN PASS COMBO  ×{game.Combo}" : "";
         }
+
+        public void Dispose() => garage.Dispose();
 
         public void SetImpact(float value) => impact.color = new Color(.95f,.09f,.16f,value*.46f);
 

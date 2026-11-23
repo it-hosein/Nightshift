@@ -1,0 +1,101 @@
+.garage {
+    flex-grow: 1;
+    justify-content: center;
+    align-items: flex-start;
+    padding-left: 6%;
+    background-color: rgba(3, 9, 17, 0.17);
+}
+.garage-card {
+    width: 490px;
+    max-width: 90%;
+    padding: 25px 32px 28px;
+    background-color: rgba(10, 20, 32, 0.97);
+    border-left-width: 3px;
+    border-left-color: #a5d3c0;
+    color: #e9eff4;
+}
+.overline {
+    color: #a5d3c0;
+    font-size: 16px;
+    -unity-font-style: bold;
+    margin-bottom: 20px;
+}
+.maker {
+    color: #90a8ba;
+    font-size: 19px;
+    -unity-font-style: bold;
+}
+.model {
+    font-size: 41px;
+    -unity-font-style: bold;
+    white-space: normal;
+}
+.description {
+    margin-top: 6px;
+    margin-bottom: 15px;
+    min-height: 44px;
+    white-space: normal;
+    font-size: 16px;
+    color: #aebdcd;
+}
+.vehicle-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 13px;
+}
+.car-choice, .primary-action {
+    height: 37px;
+    margin: 2px;
+    color: #edf2f6;
+    font-size: 15px;
+    -unity-font-style: bold;
+    background-color: #1c2c3b;
+    border-color: #384d60;
+    border-radius: 2px;
+}
+.car-choice {
+    flex-basis: 31%;
+    flex-grow: 1;
+}
+.car-choice:focus, .primary-action:focus {
+    border-color: #dbecc4;
+}
+.car-choice:hover {
+    background-color: #294352;
+}
+.car-choice.chosen, .primary-action {
+    background-color: #b6d7a6;
+    color: #142820;
+}
+.primary-action {
+    margin-top: 21px;
+    height: 44px;
+}
+.primary-action:hover {
+    background-color: #dbecc4;
+}
+.stat-heading {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 9px;
+    font-size: 15px;
+    -unity-font-style: bold;
+}
+.value {
+    color: #99afc0;
+}
+.track {
+    height: 8px;
+    margin: 2px 2px 3px;
+    background-color: #304052;
+}
+.fill {
+    width: 0;
+    height: 100%;
+    transition-property: width;
+    transition-duration: 180ms;
+}
+.speed { background-color: #ef9e7e; }
+.maneuver { background-color: #a7d7b8; }
+.nitro { background-color: #83b9ec; }
+.brake { background-color: #dbc68b; }

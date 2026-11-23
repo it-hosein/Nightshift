@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60b6d1fdb48e8801c1bcf4187bce45b7, type: 3}
+  m_Name: BMW M4 Competition
+  m_EditorClassIdentifier:
+  id: "m4"
+  maker: "BMW"
+  model: "M4 Competition"
+  description: "The largest nitro reserve. Use longer bursts and agile line changes to stay ahead."
+  resourceName: "BMW"
+  paint: 2
+  topSpeed: 81
+  acceleration: 0.46
+  handling: 81
+  nitroUse: 15.3
+  braking: 1.75

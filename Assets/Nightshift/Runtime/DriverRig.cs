@@ -17,9 +17,10 @@ namespace Nightshift
         readonly MeshRenderer courseGlow;
         readonly Light courseLamp;
         readonly bool player;
+        Transform modelRoot;
         float pitch, roll;
 
-        public DriverRig(Transform root, NightMaterials art, bool player, int palette)
+        public DriverRig(Transform root, NightMaterials art, bool player, int palette, VehicleSpec vehicle = null)
         {
             this.player = player;
             Root = root;
@@ -32,11 +33,27 @@ namespace Nightshift
                 courseLamp = Root.Find("Course underbody light").GetComponent<Light>();
             }
 
-            string name = player ? "Car" : TrafficModels[(palette - 1) % TrafficModels.Length];
+            string fallback = player ? "Car" : TrafficModels[(palette - 1) % TrafficModels.Length];
+            Equip(art, vehicle != null ? vehicle.resourceName : fallback, vehicle != null ? vehicle.paint : palette);
+        }
+
+        public void Equip(NightMaterials art, string name, int palette)
+        {
+            if (modelRoot != null)
+            {
+                modelRoot.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(modelRoot.gameObject);
+            }
+            wheels.Clear();
+            tailLights.Clear();
+            pitch = roll = 0;
+            shell.localRotation = Quaternion.identity;
             var model = Resources.Load<GameObject>("Nightshift/" + name);
             if (model == null) throw new InvalidOperationException($"Missing imported vehicle: {name}.");
             var car = UnityEngine.Object.Instantiate(model, shell).transform;
-            var renderers = car.GetComponentsInChildren<Renderer>();
+            modelRoot = car;
+            car.localPosition = Vector3.zero;
+            var renderers = car.GetComponentsInChildren<Renderer>(true);
             foreach (var t in car.GetComponentsInChildren<Transform>(true))
             {
                 if (t.name.Equals("wheel_fl", StringComparison.OrdinalIgnoreCase) ||
@@ -44,20 +61,20 @@ namespace Nightshift
                     t.name.Equals("wheel_rl", StringComparison.OrdinalIgnoreCase) ||
                     t.name.Equals("wheel_rr", StringComparison.OrdinalIgnoreCase)) wheels.Add(t);
             }
-            if (player)
+            if (name == "Car")
                 AlignFerrari(car, renderers);
             else
             {
-                var headlights = car.Find("Headlights");
-                var taillights = car.Find("Taillights");
+                var headlights = Array.Find(renderers, r => r.name == "Headlights");
+                var taillights = Array.Find(renderers, r => r.name == "Taillights");
                 if (headlights != null && taillights != null &&
-                    headlights.GetComponent<Renderer>().bounds.center.z < taillights.GetComponent<Renderer>().bounds.center.z)
+                    shell.InverseTransformPoint(RendererCenter(headlights)).z < shell.InverseTransformPoint(RendererCenter(taillights)).z)
                     car.localRotation *= Quaternion.Euler(0, 180, 0);
             }
-            Bounds bounds = renderers[0].bounds;
+            if (renderers.Length == 0) throw new InvalidOperationException($"No renderers in {name}.");
+            Bounds bounds = Measure(renderers);
             foreach (var r in renderers)
             {
-                bounds.Encapsulate(r.bounds);
                 string n = r.name.ToLowerInvariant();
                 if (n == "body" || n == "paint") r.sharedMaterial = art.Paints[palette % art.Paints.Length];
                 else if (n == "glass") r.sharedMaterial = art.Glass;
@@ -72,7 +89,42 @@ namespace Nightshift
             }
             float scale = player ? Mathf.Clamp(4.55f / Mathf.Max(.1f, bounds.size.z), .1f, 100) : 1;
             car.localScale *= scale;
-            car.localPosition -= shell.InverseTransformPoint(new Vector3(bounds.center.x, bounds.min.y, bounds.center.z)) * scale;
+            car.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z) * scale;
+        }
+
+        static Vector3 RendererCenter(Renderer renderer) => renderer.transform.TransformPoint(renderer.localBounds.center);
+
+        Bounds Measure(Renderer[] renderers)
+        {
+            var result = new Bounds(shell.InverseTransformPoint(RendererCenter(renderers[0])), Vector3.zero);
+            foreach (var renderer in renderers)
+            {
+                Bounds bounds = renderer.localBounds;
+                Matrix4x4 toRig = shell.worldToLocalMatrix * renderer.localToWorldMatrix;
+                foreach (int sx in Signs.Values)
+                foreach (int sy in Signs.Values)
+                foreach (int sz in Signs.Values)
+                {
+                    Vector3 corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3(sx, sy, sz));
+                    result.Encapsulate(toRig.MultiplyPoint3x4(corner));
+                }
+            }
+            return result;
+        }
+
+        public void SetGhostMaterial(Material material)
+        {
+            for (int i = 0; i < Root.childCount; i++)
+                Root.GetChild(i).gameObject.SetActive(Root.GetChild(i) == shell);
+
+            foreach (var renderer in modelRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                var slots = renderer.sharedMaterials;
+                for (int i = 0; i < slots.Length; i++) slots[i] = material;
+                renderer.sharedMaterials = slots;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
         }
 
         void AlignFerrari(Transform car, Renderer[] renderers)
@@ -98,7 +150,7 @@ namespace Nightshift
             foreach (var renderer in renderers)
             {
                 if (!renderer.name.Equals("body", StringComparison.OrdinalIgnoreCase)) continue;
-                if (Vector3.Dot(up, renderer.bounds.center - axleCenter) < 0) up = -up;
+                if (Vector3.Dot(up, RendererCenter(renderer) - axleCenter) < 0) up = -up;
                 car.rotation = shell.rotation * Quaternion.Inverse(Quaternion.LookRotation(forward, up)) * car.rotation;
                 break;
             }
