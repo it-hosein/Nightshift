@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Rendering.PostProcessing;
 
 namespace Nightshift
 {
@@ -39,7 +38,6 @@ namespace Nightshift
         NightParticles effects;
         SkyFireworks fireworks;
         GameHud hud;
-        Camera chase;
         InputActionMap driving, menus;
         InputAction throttle, brake;
         ObjectPool<TrafficObstacle> cruising, moving, stationary;
@@ -49,11 +47,14 @@ namespace Nightshift
         ObjectPool<FuelPickup> fuels;
         ObjectPool<HeartPickup> hearts;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        static void Boot()
-        {
-            if (Instance == null) new GameObject("Nightshift GameManager").AddComponent<GameManager>();
-        }
+        [SerializeField] NightMaterials art;
+        [SerializeField] Camera chase;
+        [SerializeField] Transform playerRig;
+        [SerializeField] InputActionAsset controls;
+        [SerializeField] AudioSource engine, music, soundEffects;
+        [SerializeField] AudioClip collisionClip, coinClip, fuelClip, heartClip;
+
+        InputActionAsset inputInstance;
 
         void Awake()
         {
@@ -63,105 +64,43 @@ namespace Nightshift
             QualitySettings.shadowDistance = 64;
             QualitySettings.pixelLightCount = 5;
             record = PlayerPrefs.GetInt(RecordKey, 0);
-            var art = new NightMaterials();
-            chase = SetupScene(art);
+            DynamicGI.UpdateEnvironment();
             highway = new Highway(transform, art);
-            driver = new DriverRig(transform, art, true, 0);
-            cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(art, i, false), item => !item.Active);
-            moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(art, i + 2, true), item => !item.Active);
+            driver = new DriverRig(playerRig, art, true, 0);
+            cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(i, false), item => !item.Active);
+            moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(i + 2, true), item => !item.Active);
             stationary = new ObjectPool<TrafficObstacle>(3, i =>
-                new StaticTraffic(new DriverRig(transform, art, false, i * 2 + 2), art), item => !item.Active);
-            coins = new ObjectPool<CoinPickup>(24, i => new CoinPickup(art.Coin(transform)), item => !item.Active);
-            fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(art.Can(transform)), item => !item.Active);
-            hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(art.Heart(transform)), item => !item.Active);
+                new StaticTraffic(NewTrafficRig(i * 2 + 2), art), item => !item.Active);
+            coins = new ObjectPool<CoinPickup>(24, i => new CoinPickup(Instantiate(art.Coin, transform).transform), item => !item.Active);
+            fuels = new ObjectPool<FuelPickup>(8, i => new FuelPickup(Instantiate(art.Fuel, transform).transform), item => !item.Active);
+            hearts = new ObjectPool<HeartPickup>(2, i => new HeartPickup(Instantiate(art.Heart, transform).transform), item => !item.Active);
             effects = new NightParticles(transform, art, driver.ExhaustMount);
             fireworks = new SkyFireworks(transform);
-            audioRig = new NightAudio(transform);
+            audioRig = new NightAudio(engine, music, soundEffects, collisionClip, coinClip, fuelClip, heartClip);
             CreateActions();
             hud = new GameHud(this);
             Change(GameState.Menu);
             ResetRun();
         }
 
-        TrafficObstacle NewTraffic(NightMaterials art, int i, bool driving) =>
-            driving ? (TrafficObstacle)new MovingTraffic(new DriverRig(transform, art, false, i + 1))
-                    : new CruisingTraffic(new DriverRig(transform, art, false, i + 1));
+        TrafficObstacle NewTraffic(int i, bool driving) =>
+            driving ? (TrafficObstacle)new MovingTraffic(NewTrafficRig(i + 1))
+                    : new CruisingTraffic(NewTrafficRig(i + 1));
 
-        Camera SetupScene(NightMaterials art)
-        {
-            RenderSettings.skybox = art.Sky;
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogColor = new Color(.065f, .09f, .145f);
-            RenderSettings.fogDensity = .0031f;
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(.37f, .47f, .68f);
-            RenderSettings.ambientEquatorColor = new Color(.20f, .24f, .33f);
-            RenderSettings.ambientGroundColor = new Color(.11f, .12f, .17f);
-            RenderSettings.reflectionIntensity = .47f;
-            DynamicGI.UpdateEnvironment();
-
-            var sun = new GameObject("Moonlight", typeof(Light)).GetComponent<Light>();
-            sun.transform.SetParent(transform, false);
-            sun.transform.rotation = Quaternion.Euler(34, -43, 0);
-            sun.type = LightType.Directional;
-            sun.color = new Color(.64f, .77f, 1); sun.intensity = .92f;
-            sun.shadows = LightShadows.Soft; sun.shadowStrength = .77f;
-            RenderSettings.sun = sun;
-            var soft = new GameObject("Fill", typeof(Light)).GetComponent<Light>();
-            soft.transform.SetParent(transform, false); soft.transform.rotation = Quaternion.Euler(24, 153, 0);
-            soft.type = LightType.Directional; soft.color = new Color(.55f, .68f, 1); soft.intensity = .34f;
-
-            var cameraObject = new GameObject("Third-person chase camera", typeof(Camera), typeof(AudioListener));
-            cameraObject.transform.SetParent(transform, false);
-            cameraObject.tag = "MainCamera";
-            var cam = cameraObject.GetComponent<Camera>();
-            cam.allowHDR = true; cam.allowMSAA = true;
-            cam.farClipPlane = 1040; cam.nearClipPlane = .12f;
-            var resources = Resources.Load<PostProcessResources>("NightshiftPostProcessResources");
-            if (resources == null)
-            {
-                Debug.LogWarning("Nightshift post-processing resources were not imported.");
-                return cam;
-            }
-            var post = cameraObject.AddComponent<PostProcessLayer>();
-            post.Init(resources);
-            post.volumeLayer = 1 << 0;
-            post.volumeTrigger = cam.transform;
-            post.antialiasingMode = PostProcessLayer.Antialiasing.FastApproximateAntialiasing;
-            var volume = new GameObject("Night grading and bloom", typeof(PostProcessVolume)).GetComponent<PostProcessVolume>();
-            volume.transform.SetParent(transform, false); volume.isGlobal = true;
-            var profile = ScriptableObject.CreateInstance<PostProcessProfile>();
-            volume.sharedProfile = profile;
-            var bloom = profile.AddSettings<Bloom>();
-            bloom.enabled.Override(true); bloom.intensity.Override(2.4f); bloom.threshold.Override(1.12f); bloom.softKnee.Override(.72f);
-            var vignette = profile.AddSettings<Vignette>();
-            vignette.enabled.Override(true); vignette.intensity.Override(.23f); vignette.smoothness.Override(.50f);
-            var grade = profile.AddSettings<ColorGrading>();
-            grade.enabled.Override(true); grade.tonemapper.Override(Tonemapper.ACES);
-            return cam;
-        }
+        DriverRig NewTrafficRig(int palette) =>
+            new DriverRig(Instantiate(art.TrafficRig, transform).transform, art, false, palette);
 
         void CreateActions()
         {
-            driving = new InputActionMap("Driving");
-            var left = driving.AddAction("LaneLeft", InputActionType.Button, "<Keyboard>/a");
-            left.AddBinding("<Keyboard>/leftArrow"); left.AddBinding("<Gamepad>/dpad/left");
-            left.performed += _ => lane = Mathf.Max(-1, lane - 1);
-            var right = driving.AddAction("LaneRight", InputActionType.Button, "<Keyboard>/d");
-            right.AddBinding("<Keyboard>/rightArrow"); right.AddBinding("<Gamepad>/dpad/right");
-            right.performed += _ => lane = Mathf.Min(1, lane + 1);
-            throttle = driving.AddAction("Nitro", InputActionType.Button, "<Keyboard>/w");
-            throttle.AddBinding("<Keyboard>/upArrow"); throttle.AddBinding("<Gamepad>/rightTrigger");
-            brake = driving.AddAction("Brake", InputActionType.Button, "<Keyboard>/s");
-            brake.AddBinding("<Keyboard>/downArrow"); brake.AddBinding("<Keyboard>/space"); brake.AddBinding("<Gamepad>/leftTrigger");
-
-            menus = new InputActionMap("Menu");
-            var pause = menus.AddAction("Pause", InputActionType.Button, "<Keyboard>/escape");
-            pause.AddBinding("<Keyboard>/p"); pause.AddBinding("<Gamepad>/start");
-            pause.performed += _ => TogglePause();
-            var mute = menus.AddAction("Mute", InputActionType.Button, "<Keyboard>/m");
-            mute.performed += _ => ToggleMute();
+            inputInstance = Instantiate(controls);
+            driving = inputInstance.FindActionMap("Driving", true);
+            menus = inputInstance.FindActionMap("Menu", true);
+            driving.FindAction("LaneLeft", true).performed += _ => lane = Mathf.Max(-1, lane - 1);
+            driving.FindAction("LaneRight", true).performed += _ => lane = Mathf.Min(1, lane + 1);
+            throttle = driving.FindAction("Nitro", true);
+            brake = driving.FindAction("Brake", true);
+            menus.FindAction("Pause", true).performed += _ => TogglePause();
+            menus.FindAction("Mute", true).performed += _ => ToggleMute();
             menus.Enable();
         }
 
@@ -512,8 +451,11 @@ namespace Nightshift
         void OnDestroy()
         {
             if (Instance != this) return;
-            if (driving != null) foreach (var action in driving.actions) action.Dispose();
-            if (menus != null) foreach (var action in menus.actions) action.Dispose();
+            if (inputInstance != null)
+            {
+                inputInstance.Disable();
+                Destroy(inputInstance);
+            }
             Instance = null;
         }
     }
@@ -596,13 +538,11 @@ namespace Nightshift
     }
     public sealed class StaticTraffic : TrafficObstacle
     {
-        readonly Transform[] hazards = new Transform[2];
+        readonly GameObject hazards;
 
         public StaticTraffic(DriverRig rig, NightMaterials art) : base(rig)
         {
-            for (int i = 0; i < hazards.Length; i++)
-                hazards[i] = NightMaterials.Primitive(Root, PrimitiveType.Cube, "Hazard lamp",
-                    new Vector3((2 * i - 1) * .82f, .59f, -2.14f), new Vector3(.15f,.055f,.043f), art.Marker);
+            hazards = UnityEngine.Object.Instantiate(art.HazardLights, Root);
         }
 
         public override void Spawn(double distance, int lane, float velocity = 0) => base.Spawn(distance, lane, 0);
@@ -611,7 +551,7 @@ namespace Nightshift
         {
             base.Tick(dt, player);
             bool flash = Time.unscaledTime % 1.18f < .53f;
-            foreach (var lamp in hazards) lamp.gameObject.SetActive(flash);
+            hazards.SetActive(flash);
         }
     }
     public abstract class Pickup : Interactable

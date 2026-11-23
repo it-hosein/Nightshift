@@ -9,7 +9,7 @@ namespace Nightshift.EditorTools
     {
         enum Platform { Windows64, Linux64 }
 
-        [SerializeField] string firstName = "", lastName = "", studentId = "", repository = "https://github.com/it-hosein/Nightshift";
+        [SerializeField] string firstName = "", lastName = "", studentId = "", repository = "https://github.com/it-hosein/Nightshift/tree/unity-authored-assets";
         [SerializeField] Platform platform;
 
         [MenuItem("Nightshift/Build Assignment ZIP…")]
@@ -26,7 +26,7 @@ namespace Nightshift.EditorTools
             firstName = EditorGUILayout.TextField("First name (Latin)", firstName);
             lastName = EditorGUILayout.TextField("Last name (Latin)", lastName);
             studentId = EditorGUILayout.TextField("Student ID", studentId);
-            repository = EditorGUILayout.TextField("GitHub repository URL", repository);
+            repository = EditorGUILayout.TextField("GitHub repository or branch URL", repository);
             platform = (Platform)EditorGUILayout.EnumPopup("Build platform", platform);
 
             EditorGUILayout.Space();

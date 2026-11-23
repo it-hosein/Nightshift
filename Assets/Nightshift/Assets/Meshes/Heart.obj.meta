@@ -1,0 +1,30 @@
+fileFormatVersion: 2
+guid: e76f1845361cda2fd72a7267dcebf229
+ModelImporter:
+  serializedVersion: 24200
+  internalIDToNameTable:
+  - first:
+      43: 4300000
+    second: Heart
+  externalObjects: {}
+  materials:
+    materialImportMode: 0
+  meshes:
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    importVisibility: 0
+    importBlendShapes: 0
+    importCameras: 0
+    importLights: 0
+    fileIdsGeneration: 1
+    useFileScale: 0
+  tangentSpace:
+    normalSmoothAngle: 70
+    importNormals: 1
+    importTangents: 0
+  importAnimation: 0
+  animationType: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:

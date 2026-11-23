@@ -88,9 +88,11 @@ namespace Nightshift
     sealed class RoadSegment
     {
         readonly Transform root;
-        readonly MeshData road, markings, reflectors, walls, rails, warm, cool, land, trees, water;
+        readonly MeshData road, markings, reflectors, walls, rails, cool, land, trees, water;
         readonly Transform[] glows = new Transform[6];
         readonly NightMaterials art;
+        readonly Transform[] streetLamps, tunnelLights;
+        readonly Transform routeSign, bridgeSign;
         public int Index { get; private set; }
         public bool Active => root.gameObject.activeSelf;
         double start;
@@ -105,13 +107,30 @@ namespace Nightshift
             reflectors = new MeshData(root, art.Marker, "Road studs");
             walls = new MeshData(root, art.Concrete, "Structure");
             rails = new MeshData(root, art.Metal, "Guardrails");
-            warm = new MeshData(root, art.Lamp, "Street lamps");
             cool = new MeshData(root, art.ColdLamp, "Tunnel lights");
             land = new MeshData(root, art.Land, "Mountain terrain");
             trees = new MeshData(root, art.Tree, "Pines");
             water = new MeshData(root, art.Water, "River");
             for (int i = 0; i < glows.Length; i++) glows[i] = art.Glow(root, "Street reflection", art.AmberGlow);
+            streetLamps = Props(art.StreetLamp, 6);
+            tunnelLights = Props(art.TunnelLight, 24);
+            routeSign = UnityEngine.Object.Instantiate(art.RouteSign, root).transform;
+            bridgeSign = UnityEngine.Object.Instantiate(art.BridgeSign, root).transform;
             Release();
+        }
+
+        Transform[] Props(GameObject prefab, int count)
+        {
+            var props = new Transform[count];
+            for (int i = 0; i < count; i++) props[i] = UnityEngine.Object.Instantiate(prefab, root).transform;
+            return props;
+        }
+
+        void PlaceProp(Transform prop, float distance, float x, float y, float angle = 0)
+        {
+            prop.localPosition = At(distance, x, y);
+            prop.localRotation = Yaw(distance) * Quaternion.Euler(0, angle, 0);
+            prop.gameObject.SetActive(true);
         }
 
         public void Release() => root.gameObject.SetActive(false);
@@ -131,7 +150,13 @@ namespace Nightshift
             int type = Route.Zone(index);
             root.gameObject.SetActive(true);
             road.Clear(); markings.Clear(); reflectors.Clear(); walls.Clear(); rails.Clear();
-            warm.Clear(); cool.Clear(); land.Clear(); trees.Clear(); water.Clear();
+            cool.Clear(); land.Clear(); trees.Clear(); water.Clear();
+            foreach (var prop in streetLamps) prop.gameObject.SetActive(false);
+            foreach (var prop in tunnelLights) prop.gameObject.SetActive(false);
+            routeSign.gameObject.SetActive(false);
+            bridgeSign.gameObject.SetActive(false);
+            if (type == 0 && Route.Zone(index + 1) == 1) PlaceProp(routeSign, 67, 7.52f, 0);
+            if (type == 0 && Route.Zone(index + 1) == 2) PlaceProp(bridgeSign, 67, 7.52f, 0);
 
             for (int d = 0; d < Route.Length; d += 4)
             {
@@ -160,10 +185,9 @@ namespace Nightshift
                     for (int k = 0; k < 3; k++)
                     {
                         int d = 13 + k * 32;
-                        rails.Box(At(d, side * 6.9f, 3.15f), new Vector3(.12f, 6.3f, .12f), Yaw(d));
-                        rails.Box(At(d, side * 6.27f, 6.28f), new Vector3(1.26f, .10f, .14f), Yaw(d));
-                        warm.Box(At(d, side * 5.63f, 6.21f), new Vector3(.32f, .11f, .66f), Yaw(d));
-                        SetGlow(glows[(side > 0 ? 3 : 0) + k], At(d, side * 4.3f, .034f), 7.8f, 13f,
+                        int lamp = (side > 0 ? 3 : 0) + k;
+                        PlaceProp(streetLamps[lamp], d, side * 6.9f, 0, side > 0 ? 180 : 0);
+                        SetGlow(glows[lamp], At(d, side * 4.3f, .034f), 7.8f, 13f,
                             type == 2 ? art.BlueGlow : art.AmberGlow);
                     }
                     for (int k = 0; k < 27; k++)
@@ -209,7 +233,8 @@ namespace Nightshift
                     foreach (int side in Signs.Values)
                     {
                         walls.Box(At(d, side * 7.14f, .60f), new Vector3(.59f, 1.20f, 4.20f), Yaw(d));
-                        if (d % 8 == 2) cool.Box(At(d, side * 3.77f, 6.75f), new Vector3(.14f, .12f, 2.75f), Yaw(d));
+                        if (d % 8 == 2)
+                            PlaceProp(tunnelLights[(side > 0 ? 12 : 0) + d / 8], d, side * 3.77f, 6.75f);
                     }
                 }
                 for (int i = 0; i < 6; i++) SetGlow(glows[i], At(8 + i * 16, 0, .037f), 12, 14, art.BlueGlow);
@@ -220,7 +245,7 @@ namespace Nightshift
                 water.Quad(At(0, -54, -12), At(96, -54, -12), At(96, 54, -12), At(0, 54, -12), Color.white, Vector2.one, 0);
             }
             road.Apply(); markings.Apply(); reflectors.Apply(); walls.Apply(); rails.Apply();
-            warm.Apply(); cool.Apply(); land.Apply(); trees.Apply(); water.Apply();
+            cool.Apply(); land.Apply(); trees.Apply(); water.Apply();
         }
 
         void BuildLand(int side)

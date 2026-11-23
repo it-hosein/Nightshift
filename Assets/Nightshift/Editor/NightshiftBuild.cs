@@ -25,7 +25,7 @@ namespace Nightshift.EditorTools
             var settings = new SerializedObject(graphics[0]);
             var list = settings.FindProperty("m_AlwaysIncludedShaders");
             if (list == null) return;
-            foreach (string name in new[] { "Standard", "Skybox/Panoramic", "Particles/Standard Unlit" })
+            foreach (string name in new[] { "Standard" })
             {
                 var shader = Shader.Find(name);
                 if (shader == null) continue;
@@ -59,6 +59,7 @@ namespace Nightshift.EditorTools
         {
             if (!BuildPipeline.IsBuildTargetSupported(BuildPipeline.GetBuildTargetGroup(target), target))
                 throw new InvalidOperationException("Install the matching Build Support module in Unity Hub.");
+            NightshiftValidation.Validate();
             EnsureRuntimeShaders();
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             var report = BuildPipeline.BuildPlayer(new[] { Scene }, path, target, BuildOptions.None);

@@ -26,10 +26,10 @@ namespace Nightshift.EditorTools
             if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
                 uri.Scheme != Uri.UriSchemeHttps || uri.Host != "github.com" || !uri.IsDefaultPort ||
                 uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0 ||
-                !Regex.IsMatch(uri.AbsolutePath, @"\A/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/?\z"))
-                throw new ArgumentException("Enter a GitHub repository URL, such as https://github.com/username/nightshift-hw2.");
+                !Regex.IsMatch(uri.AbsolutePath, @"\A/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+(?:/tree/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)?/?\z"))
+                throw new ArgumentException("Enter a GitHub repository or branch URL, such as https://github.com/username/nightshift-hw2.");
             string path = uri.AbsolutePath.TrimEnd('/');
-            if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) path = path.Substring(0, path.Length - 4);
+            if (!path.Contains("/tree/") && path.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) path = path.Substring(0, path.Length - 4);
             if (path.EndsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Enter a GitHub repository name.");
             return "https://github.com" + path;
         }
@@ -48,7 +48,12 @@ namespace Nightshift.EditorTools
                 using (var zip = ZipFile.Open(partial, ZipArchiveMode.Create))
                 {
                     using (var writer = new StreamWriter(zip.CreateEntry("Repository.txt").Open()))
-                        writer.WriteLine(Repository(repository));
+                    {
+                        string source = Repository(repository);
+                        int branch = source.IndexOf("/tree/", StringComparison.Ordinal);
+                        writer.WriteLine(branch < 0 ? source : source.Substring(0, branch));
+                        if (branch >= 0) writer.WriteLine(source);
+                    }
                     zip.CreateEntryFromFile(report, "Report.pdf", CompressionLevel.Optimal);
                     foreach (var file in Directory.EnumerateFiles(buildFolder, "*", SearchOption.AllDirectories))
                     {
