@@ -68,7 +68,7 @@
     color: #142820;
 }
 .primary-action {
-    margin-top: 21px;
+    margin-top: 9px;
     height: 44px;
 }
 .primary-action:hover {
@@ -99,3 +99,30 @@
 .maneuver { background-color: #a7d7b8; }
 .nitro { background-color: #83b9ec; }
 .brake { background-color: #dbc68b; }
+
+.paint-heading {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 14px;
+    -unity-font-style: bold;
+}
+.paint-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+.paint-choice {
+    flex-basis: 31%;
+    flex-grow: 1;
+    height: 32px;
+    margin: 3px;
+    border-width: 2px;
+    border-color: #334c60;
+    color: white;
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: #162333;
+    -unity-font-style: bold;
+}
+.paint-choice.paint-selected { border-color: #accbad; }
+.paint-choice:focus, .paint-choice:hover { border-color: #ffffff; }
+
+.keyboard-hint { margin-top: 8px; font-size: 12px; color: #99afc0; }

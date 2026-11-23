@@ -31,7 +31,7 @@ namespace Nightshift
 
         sealed class Frame
         {
-            public double distance;
+            public double distance, playerWheels, rivalWheels;
             public readonly ActorPose[] poses;
             public Frame(int count) { poses = new ActorPose[count]; }
         }
@@ -44,18 +44,22 @@ namespace Nightshift
         readonly Frame[] ring, pending, highlight;
         readonly ActorPose[] parked;
         readonly Highway highway;
+        readonly DriverRig playerRig, rivalRig;
         int write, count, rank, candidate, pendingCount, highlightCount;
-        double parkedDistance;
+        double parkedDistance, parkedPlayerWheels, parkedRivalWheels;
         float lastSample, cursor, originalFov;
         Vector3 originalPosition;
         Quaternion originalRotation;
         public bool Available => highlightCount > 1;
 
-        public OvertakeReplay(Camera camera, Transform[] actors, Highway highway, GameObject shotPrefab)
+        public OvertakeReplay(Camera camera, Transform[] actors, Highway highway, GameObject shotPrefab,
+            DriverRig playerRig, DriverRig rivalRig)
         {
             this.camera = camera;
             this.actors = actors;
             this.highway = highway;
+            this.playerRig = playerRig;
+            this.rivalRig = rivalRig;
             ring = Buffer(Before, actors.Length);
             pending = Buffer(Before + After, actors.Length);
             highlight = Buffer(Before + After, actors.Length);
@@ -90,6 +94,8 @@ namespace Nightshift
             lastSample = time;
             var tick = ring[write];
             tick.distance = distance;
+            tick.playerWheels = playerRig.WheelTravel;
+            tick.rivalWheels = rivalRig.WheelTravel;
             for (int i = 0; i < actors.Length; i++) tick.poses[i] = new ActorPose(actors[i]);
             write = (write + 1) % ring.Length;
             count = Mathf.Min(count + 1, ring.Length);
@@ -120,6 +126,8 @@ namespace Nightshift
         static void Copy(Frame source, Frame destination)
         {
             destination.distance = source.distance;
+            destination.playerWheels = source.playerWheels;
+            destination.rivalWheels = source.rivalWheels;
             System.Array.Copy(source.poses, destination.poses, source.poses.Length);
         }
 
@@ -128,6 +136,8 @@ namespace Nightshift
             if (!Available) return;
             for (int i = 0; i < actors.Length; i++) parked[i] = new ActorPose(actors[i]);
             parkedDistance = distance;
+            parkedPlayerWheels = playerRig.WheelTravel;
+            parkedRivalWheels = rivalRig.WheelTravel;
             originalPosition = camera.transform.position;
             originalRotation = camera.transform.rotation;
             originalFov = camera.fieldOfView;
@@ -164,6 +174,8 @@ namespace Nightshift
                 pose.Apply(actors[i]);
             }
 
+            playerRig.ApplyWheelTravel(a.playerWheels + (b.playerWheels - a.playerWheels) * blend);
+            rivalRig.ApplyWheelTravel(a.rivalWheels + (b.rivalWheels - a.rivalWheels) * blend);
             var player = actors[0];
             Transform angle = cursor < highlightCount * .51f ? roadside : wheel;
             Vector3 position = player.TransformPoint(angle.localPosition);
@@ -179,6 +191,8 @@ namespace Nightshift
             brain.enabled = false;
             shot.gameObject.SetActive(false);
             highway.Update(parkedDistance);
+            playerRig.ApplyWheelTravel(parkedPlayerWheels);
+            rivalRig.ApplyWheelTravel(parkedRivalWheels);
             for (int i = 0; i < actors.Length; i++) parked[i].Apply(actors[i]);
             camera.transform.SetPositionAndRotation(originalPosition, originalRotation);
             camera.fieldOfView = originalFov;

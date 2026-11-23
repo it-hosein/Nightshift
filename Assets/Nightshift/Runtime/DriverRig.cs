@@ -10,7 +10,23 @@ namespace Nightshift
         public Transform ExhaustMount => shell;
         static readonly string[] TrafficModels = { "Porsche", "Lamborghini", "Bugatti", "BMW" };
         readonly Transform shell;
-        readonly List<Transform> wheels = new List<Transform>(4);
+        readonly struct Wheel
+        {
+            public readonly Transform pivot;
+            public readonly Vector3 axis;
+            public readonly Quaternion restingRotation;
+            public readonly float radius;
+            public Wheel(Transform pivot, Vector3 axis, float radius)
+            {
+                this.pivot = pivot;
+                this.axis = axis;
+                restingRotation = pivot.localRotation;
+                this.radius = radius;
+            }
+        }
+
+        readonly List<Wheel> wheels = new List<Wheel>(4);
+        readonly List<Renderer> paintwork = new List<Renderer>();
         readonly MaterialPropertyBlock lampProperties = new MaterialPropertyBlock();
         readonly MeshRenderer[] tailReflections;
         readonly List<Renderer> tailLights = new List<Renderer>(2);
@@ -19,6 +35,7 @@ namespace Nightshift
         readonly bool player;
         Transform modelRoot;
         float pitch, roll;
+        public double WheelTravel { get; private set; }
 
         public DriverRig(Transform root, NightMaterials art, bool player, int palette, VehicleSpec vehicle = null)
         {
@@ -45,62 +62,106 @@ namespace Nightshift
                 UnityEngine.Object.Destroy(modelRoot.gameObject);
             }
             wheels.Clear();
+            WheelTravel = 0;
             tailLights.Clear();
+            paintwork.Clear();
             pitch = roll = 0;
             shell.localRotation = Quaternion.identity;
             var model = Resources.Load<GameObject>("Nightshift/" + name);
             if (model == null) throw new InvalidOperationException($"Missing imported vehicle: {name}.");
-            var car = UnityEngine.Object.Instantiate(model, shell).transform;
+            var car = new GameObject(name + " visual rig").transform;
+            car.SetParent(shell, false);
             modelRoot = car;
-            car.localPosition = Vector3.zero;
-            var renderers = car.GetComponentsInChildren<Renderer>(true);
-            foreach (var t in car.GetComponentsInChildren<Transform>(true))
+            var modelInstance = UnityEngine.Object.Instantiate(model, car).transform;
+            modelInstance.localPosition = Vector3.zero;
+            var original = modelInstance.GetComponentsInChildren<Renderer>(true);
+            var details = Resources.Load<GameObject>("Nightshift/VehicleDetails/" + name);
+            if (details != null)
             {
-                if (t.name.Equals("wheel_fl", StringComparison.OrdinalIgnoreCase) ||
-                    t.name.Equals("wheel_fr", StringComparison.OrdinalIgnoreCase) ||
-                    t.name.Equals("wheel_rl", StringComparison.OrdinalIgnoreCase) ||
-                    t.name.Equals("wheel_rr", StringComparison.OrdinalIgnoreCase)) wheels.Add(t);
+                var instance = UnityEngine.Object.Instantiate(details, car);
+                instance.transform.localPosition = Vector3.zero;
+                bool separateWheels = name == "BMW" || name == "Porsche" || name == "Bugatti" || name == "Lamborghini";
+                if (separateWheels)
+                    foreach (var renderer in original)
+                    {
+                        string piece = renderer.name;
+                        if (piece == "Rim" || piece == "Wheel" || (name == "Bugatti" && piece == "Metal"))
+                            renderer.enabled = false;
+                    }
             }
-            if (name == "Car")
-                AlignFerrari(car, renderers);
-            else
-            {
-                var headlights = Array.Find(renderers, r => r.name == "Headlights");
-                var taillights = Array.Find(renderers, r => r.name == "Taillights");
-                if (headlights != null && taillights != null &&
-                    shell.InverseTransformPoint(RendererCenter(headlights)).z < shell.InverseTransformPoint(RendererCenter(taillights)).z)
-                    car.localRotation *= Quaternion.Euler(0, 180, 0);
-            }
+
+            Transform fl = FindPart(car, "wheel_fl");
+            Transform fr = FindPart(car, "wheel_fr");
+            Transform rl = FindPart(car, "wheel_rl");
+            Transform rr = FindPart(car, "wheel_rr");
+            var renderers = Array.FindAll(car.GetComponentsInChildren<Renderer>(true), renderer => renderer.enabled);
             if (renderers.Length == 0) throw new InvalidOperationException($"No renderers in {name}.");
-            Bounds bounds = Measure(renderers);
-            foreach (var r in renderers)
-            {
-                string n = r.name.ToLowerInvariant();
-                if (n == "body" || n == "paint") r.sharedMaterial = art.Paints[palette % art.Paints.Length];
-                else if (n == "glass") r.sharedMaterial = art.Glass;
-                else if (n == "lights_red" || n == "taillights")
-                {
-                    r.sharedMaterial = player ? art.PlayerTaillight : art.TrafficTaillight;
-                    if (player) tailLights.Add(r);
-                }
-                else if (n == "trim") r.sharedMaterial = art.Rubber;
-                else if (!player && (n == "headlights" || n == "lights")) r.sharedMaterial = art.TrafficHeadlight;
-                else if (n == "headlights") r.sharedMaterial = art.PlayerHeadlight;
-            }
+            AlignCar(car, renderers, fl, fr, rl, rr);
+
+            Bounds bounds = Measure(renderers, shell);
             float scale = player ? Mathf.Clamp(4.55f / Mathf.Max(.1f, bounds.size.z), .1f, 100) : 1;
             car.localScale *= scale;
             car.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z) * scale;
+            AddWheel(fl);
+            AddWheel(fr);
+            AddWheel(rl);
+            AddWheel(rr);
+
+            foreach (var renderer in renderers)
+            {
+                string part = renderer.name.ToLowerInvariant();
+                if (part == "body" || part == "paint") paintwork.Add(renderer);
+                else if (part == "glass") renderer.sharedMaterial = art.Glass;
+                else if (part == "lights_red" || part == "taillights" || part.StartsWith("detail tail", StringComparison.Ordinal)
+                    || (name == "Car" && part == "brakes"))
+                {
+                    renderer.sharedMaterial = player ? art.PlayerTaillight : art.TrafficTaillight;
+                    if (player) tailLights.Add(renderer);
+                }
+                else if (part == "headlights" || part == "lights" || part.StartsWith("detail head", StringComparison.Ordinal))
+                    renderer.sharedMaterial = player ? art.PlayerHeadlight : art.TrafficHeadlight;
+                else if (part == "rim" || part.StartsWith("rim_", StringComparison.Ordinal)
+                    || part.StartsWith("detail metal", StringComparison.Ordinal) || part == "detail fixed rim")
+                    renderer.sharedMaterial = art.Metal;
+                else if (part.StartsWith("detail rubber", StringComparison.Ordinal) || part == "detail fixed wheel")
+                    renderer.sharedMaterial = art.Rubber;
+                else if (part == "trim" || part == "detail fixed metal")
+                    renderer.sharedMaterial = art.VehicleTrim;
+            }
+            SetPaint(art.Paints[palette % art.Paints.Length]);
+        }
+
+        public void SetPaint(Material paint)
+        {
+            foreach (var renderer in paintwork) renderer.sharedMaterial = paint;
+        }
+
+        static Transform FindPart(Transform model, string name)
+        {
+            foreach (var child in model.GetComponentsInChildren<Transform>(true))
+                if (child.name.Equals(name, StringComparison.OrdinalIgnoreCase)) return child;
+            return null;
+        }
+
+        void AddWheel(Transform pivot)
+        {
+            if (pivot == null) return;
+            var pieces = pivot.GetComponentsInChildren<Renderer>(true);
+            if (pieces.Length == 0) return;
+            Bounds bounds = Measure(pieces, shell);
+            float radius = Mathf.Clamp((bounds.size.y + bounds.size.z) * .25f, .20f, .46f);
+            wheels.Add(new Wheel(pivot, pivot.InverseTransformDirection(shell.right), radius));
         }
 
         static Vector3 RendererCenter(Renderer renderer) => renderer.transform.TransformPoint(renderer.localBounds.center);
 
-        Bounds Measure(Renderer[] renderers)
+        static Bounds Measure(Renderer[] renderers, Transform space)
         {
-            var result = new Bounds(shell.InverseTransformPoint(RendererCenter(renderers[0])), Vector3.zero);
+            var result = new Bounds(space.InverseTransformPoint(RendererCenter(renderers[0])), Vector3.zero);
             foreach (var renderer in renderers)
             {
                 Bounds bounds = renderer.localBounds;
-                Matrix4x4 toRig = shell.worldToLocalMatrix * renderer.localToWorldMatrix;
+                Matrix4x4 toRig = space.worldToLocalMatrix * renderer.localToWorldMatrix;
                 foreach (int sx in Signs.Values)
                 foreach (int sy in Signs.Values)
                 foreach (int sz in Signs.Values)
@@ -127,33 +188,29 @@ namespace Nightshift
             }
         }
 
-        void AlignFerrari(Transform car, Renderer[] renderers)
+        void AlignCar(Transform car, Renderer[] renderers, Transform fl, Transform fr, Transform rl, Transform rr)
         {
-            // Measure the imported car's axes so an FBX import rotation cannot invert the rig.
-            if (wheels.Count != 4) return;
-            Vector3 frontLeft = Vector3.zero, frontRight = Vector3.zero;
-            Vector3 rearLeft = Vector3.zero, rearRight = Vector3.zero;
-            foreach (var wheel in wheels)
+            if (fl != null && fr != null && rl != null && rr != null)
             {
-                switch (wheel.name.ToLowerInvariant())
+                Vector3 forward = (fl.position + fr.position) - (rl.position + rr.position);
+                Vector3 across = (fr.position + rr.position) - (fl.position + rl.position);
+                Vector3 up = Vector3.Cross(forward, across);
+                Vector3 center = (fl.position + fr.position + rl.position + rr.position) * .25f;
+                var body = Array.Find(renderers, r => r.name.Equals("Body", StringComparison.OrdinalIgnoreCase)
+                    || r.name.Equals("Paint", StringComparison.OrdinalIgnoreCase));
+                if (body != null && Vector3.Dot(up, RendererCenter(body) - center) < 0) up = -up;
+                if (forward.sqrMagnitude > .000001f && up.sqrMagnitude > .000001f)
                 {
-                    case "wheel_fl": frontLeft = wheel.position; break;
-                    case "wheel_fr": frontRight = wheel.position; break;
-                    case "wheel_rl": rearLeft = wheel.position; break;
-                    case "wheel_rr": rearRight = wheel.position; break;
+                    car.rotation = shell.rotation * Quaternion.Inverse(Quaternion.LookRotation(forward, up)) * car.rotation;
+                    return;
                 }
             }
-            Vector3 forward = (frontLeft + frontRight) - (rearLeft + rearRight);
-            Vector3 across = (frontRight + rearRight) - (frontLeft + rearLeft);
-            Vector3 up = Vector3.Cross(forward, across);
-            Vector3 axleCenter = (frontLeft + frontRight + rearLeft + rearRight) * .25f;
-            foreach (var renderer in renderers)
-            {
-                if (!renderer.name.Equals("body", StringComparison.OrdinalIgnoreCase)) continue;
-                if (Vector3.Dot(up, RendererCenter(renderer) - axleCenter) < 0) up = -up;
-                car.rotation = shell.rotation * Quaternion.Inverse(Quaternion.LookRotation(forward, up)) * car.rotation;
-                break;
-            }
+
+            var headlights = Array.Find(renderers, r => r.name.Equals("Headlights", StringComparison.OrdinalIgnoreCase));
+            var taillights = Array.Find(renderers, r => r.name.Equals("Taillights", StringComparison.OrdinalIgnoreCase));
+            if (headlights != null && taillights != null &&
+                shell.InverseTransformPoint(RendererCenter(headlights)).z < shell.InverseTransformPoint(RendererCenter(taillights)).z)
+                car.localRotation = Quaternion.AngleAxis(180, Vector3.up) * car.localRotation;
         }
 
         public void SetCourseUnderglow(bool enabled, float speed)
@@ -175,7 +232,7 @@ namespace Nightshift
             pitch = Mathf.Lerp(pitch, brake ? 1.67f : throttle ? -.97f : 0, lerp);
             roll = Mathf.Lerp(roll, -lateral * .68f, lerp);
             shell.localRotation = Quaternion.Euler(pitch,0,roll);
-            foreach (var wheel in wheels) wheel.Rotate(Vector3.right, speed * dt / .351f * Mathf.Rad2Deg, Space.Self);
+            if (dt > 0) ApplyWheelTravel(WheelTravel + speed * (double)dt);
             if (!player) return;
             foreach (var reflection in tailReflections)
             {
@@ -184,7 +241,17 @@ namespace Nightshift
                 SetColor(reflection, "_Color", tint);
             }
             foreach (var light in tailLights)
-                SetColor(light, "_EmissionColor", new Color(1, .04f, .08f) * (brake ? 7.45f : 3.85f));
+                SetColor(light, "_EmissionColor", new Color(1, .04f, .08f) * (brake ? 7.45f : 4.6f));
+        }
+
+        public void ApplyWheelTravel(double meters)
+        {
+            WheelTravel = meters;
+            foreach (var wheel in wheels)
+            {
+                float angle = (float)((meters / wheel.radius * Mathf.Rad2Deg) % 360);
+                wheel.pivot.localRotation = wheel.restingRotation * Quaternion.AngleAxis(angle, wheel.axis);
+            }
         }
 
         void SetColor(Renderer renderer, string property, Color color)

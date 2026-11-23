@@ -8,7 +8,7 @@ namespace Nightshift
         public Material Asphalt, Markings, Marker, Metal, Concrete, ColdLamp, Land, Tree, Water;
         public Material AmberGlow, BlueGlow, Fire;
         public Material TrafficHeadlight, TrafficTaillight, PlayerHeadlight, PlayerTaillight;
-        public Material Rubber, Glass;
+        public Material Rubber, Glass, VehicleTrim;
         public Material[] Paints;
         public GameObject TrafficRig, HazardLights, Coin, Fuel, Heart, StreetLamp, TunnelLight, RouteSign, BridgeSign;
 

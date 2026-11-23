@@ -14,4 +14,6 @@
 | Unity post-processing resources | [Unity Post Processing Stack v2](https://docs.unity3d.com/Packages/com.unity.postprocessing@3.2/manual/index.html) | See the included Unity license. |
 | Code, original audio synthesis, road geometry, gameplay, UI and documentation | Created for this project with OpenAI Codex | Compiled and packaged for this assignment. |
 
+The `VehicleDetails` FBX files use original lamp signatures for the game and separate wheel, tire and rim parts derived from the imported car meshes under the corresponding source licenses listed above.
+
 Vehicle marks identify their original vehicle designs. Nightshift uses its own road, interface, audio and gameplay content.

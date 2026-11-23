@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -15,7 +17,9 @@ namespace Nightshift
         readonly Font font;
         readonly Canvas canvas;
         readonly RectTransform screen;
-        readonly RectTransform menu, paused, ended, drive, replay;
+        readonly RectTransform menu, paused, ended, drive, replay, duelSetup;
+        readonly Button[] mainButtons, duelButtons, pauseButtons, resultButtons, replayButtons;
+        readonly Button muteButton;
         readonly GaragePanel garage;
         readonly Text eventTitle, eventDetail, draftStatus, selectedCar;
         readonly Button replayAction, replayExit;
@@ -45,6 +49,7 @@ namespace Nightshift
             var events = new GameObject("New Input System UI", typeof(EventSystem), typeof(InputSystemUIInputModule));
             events.transform.SetParent(game.transform, false);
             input = events.GetComponent<EventSystem>();
+            input.sendNavigationEvents = false;
             var inputModule = events.GetComponent<InputSystemUIInputModule>();
             if (inputModule.actionsAsset == null) inputModule.AssignDefaultActions();
 
@@ -107,29 +112,43 @@ namespace Nightshift
             Label(menu,"Thread through midnight traffic. Collect coins,\nrefuel on the move and keep the run alive.",new Vector2(0,.5f),
                 new Vector2(365,-55),new Vector2(526,68),21,Muted,TextAnchor.MiddleLeft);
             mainAction = Action(menu,"START DRIVE",new Vector2(0,.5f),new Vector2(201,-132),new Vector2(198,53),true,game.StartRun);
-            Action(menu,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(411,-132),new Vector2(198,53),false,game.StartDuel);
-            Action(menu,"TIME TRIAL",new Vector2(0,.5f),new Vector2(621,-132),new Vector2(198,53),false,game.StartTimeTrial);
-            Action(menu,"GARAGE",new Vector2(0,.5f),new Vector2(201,-196),new Vector2(198,53),false,game.OpenGarage);
+            var duel = Action(menu,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(411,-132),new Vector2(198,53),false,game.OpenDuelSetup);
+            var timeTrial = Action(menu,"TIME TRIAL",new Vector2(0,.5f),new Vector2(621,-132),new Vector2(198,53),false,game.StartTimeTrial);
+            var openGarage = Action(menu,"GARAGE",new Vector2(0,.5f),new Vector2(201,-196),new Vector2(198,53),false,game.OpenGarage);
             var course = Action(menu,"COURSE MODE", new Vector2(0,.5f),new Vector2(411,-196),new Vector2(198,53),false,game.ToggleCourseMode);
-            Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(621,-196),new Vector2(198,53),false,game.Exit);
+            var exit = Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(621,-196),new Vector2(198,53),false,game.Exit);
             courseMode = course.GetComponentInChildren<Text>();
             Label(menu,"A / D   CHANGE LANES     W   NITRO     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
                 new Vector2(632,30),16,Muted,TextAnchor.MiddleLeft);
             selectedCar = Label(menu,"",new Vector2(1,0),new Vector2(-285,62),new Vector2(500,45),28,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
 
+            duelSetup = Panel("Duel difficulty");
+            Label(duelSetup,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(482,60),new Vector2(760,112),
+                81,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
+            Label(duelSetup,"CHOOSE DIFFICULTY",new Vector2(0,.5f),new Vector2(338,-24),new Vector2(474,32),
+                22,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
+            var easy = Action(duelSetup,"EASY",new Vector2(0,.5f),new Vector2(197,-91),new Vector2(185,53),false,
+                () => game.StartDuel(DuelDifficulty.Easy));
+            var medium = Action(duelSetup,"MEDIUM",new Vector2(0,.5f),new Vector2(394,-91),new Vector2(185,53),true,
+                () => game.StartDuel(DuelDifficulty.Medium));
+            var hard = Action(duelSetup,"HARD",new Vector2(0,.5f),new Vector2(591,-91),new Vector2(185,53),false,
+                () => game.StartDuel(DuelDifficulty.Hard));
+            var duelBack = Action(duelSetup,"BACK",new Vector2(0,.5f),new Vector2(197,-155),new Vector2(185,53),false,
+                game.TogglePause);
+
             paused = Panel("Pause menu");
             Label(paused,"RUN SUSPENDED",new Vector2(0,.5f),new Vector2(303,98),new Vector2(408,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
             Label(paused,"PAUSED",new Vector2(0,.5f),new Vector2(477,20),new Vector2(758,118),96,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
             resumeAction = Action(paused,"RESUME",new Vector2(0,.5f),new Vector2(173,-82),new Vector2(151,53),true,game.TogglePause);
-            Action(paused,"RESTART",new Vector2(0,.5f),new Vector2(347,-82),new Vector2(151,53),false,game.StartRun);
-            Action(paused,"MAIN MENU",new Vector2(0,.5f),new Vector2(521,-82),new Vector2(151,53),false,game.ToMenu);
+            var restart = Action(paused,"RESTART",new Vector2(0,.5f),new Vector2(347,-82),new Vector2(151,53),false,game.StartRun);
+            var pauseBack = Action(paused,"MAIN MENU",new Vector2(0,.5f),new Vector2(521,-82),new Vector2(151,53),false,game.ToMenu);
 
             ended = Panel("Game over");
             finalReason = Label(ended,"RUN ENDED",new Vector2(0,.5f),new Vector2(303,110),new Vector2(410,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
             Label(ended,"RUN OVER",new Vector2(0,.5f),new Vector2(477,32),new Vector2(758,118),94,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
             finalResult = Label(ended,"",new Vector2(0,.5f),new Vector2(388,-54),new Vector2(580,39),24,Muted,TextAnchor.MiddleLeft);
             restartAction = Action(ended,"DRIVE AGAIN",new Vector2(0,.5f),new Vector2(188,-120),new Vector2(181,53),true,game.StartRun);
-            Action(ended,"MAIN MENU",new Vector2(0,.5f),new Vector2(373,-120),new Vector2(168,53),false,game.ToMenu);
+            var endBack = Action(ended,"MAIN MENU",new Vector2(0,.5f),new Vector2(373,-120),new Vector2(168,53),false,game.ToMenu);
             replayAction = Action(ended,"WATCH REPLAY",new Vector2(0,.5f),new Vector2(558,-120),new Vector2(183,53),false,game.StartReplay);
             replay = Full("Replay overlay", screen);
             Label(replay, "OVERTAKE REPLAY", new Vector2(.5f,1), new Vector2(0,-55),
@@ -138,15 +157,24 @@ namespace Nightshift
                 new Vector2(164,52), false, game.StopReplay);
 
             Label(screen,"///   N I G H T S H I F T",new Vector2(0,1),new Vector2(223,-45),new Vector2(354,36),21,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
-            var muteButton = Action(screen,"SOUND ON",new Vector2(1,1),new Vector2(-187,-46),new Vector2(125,46),false,game.ToggleMute);
+            muteButton = Action(screen,"SOUND ON",new Vector2(1,1),new Vector2(-187,-46),new Vector2(125,46),false,game.ToggleMute);
             mute = muteButton.GetComponentInChildren<Text>();
             pauseButton = Action(screen,"PAUSE",new Vector2(1,1),new Vector2(-83,-46),new Vector2(76,46),false,game.TogglePause);
+            mainButtons = new[] { mainAction, duel, timeTrial, openGarage, course, exit, muteButton };
+            duelButtons = new[] { easy, medium, hard, duelBack, muteButton };
+            pauseButtons = new[] { resumeAction, restart, pauseBack, muteButton };
+            resultButtons = new[] { restartAction, endBack, replayAction, muteButton };
+            replayButtons = new[] { replayExit, muteButton };
+            Label(menu, "ARROWS / TAB   SELECT     ENTER   CONFIRM", new Vector2(0,0),
+                new Vector2(419,73),new Vector2(632,24),14,Muted,TextAnchor.MiddleLeft);
         }
 
         public void Refresh()
         {
             GameState state = game.State;
             menu.gameObject.SetActive(state == GameState.Menu);
+            duelSetup.gameObject.SetActive(state == GameState.DuelSetup);
+            muteButton.gameObject.SetActive(state != GameState.Garage);
             replay.gameObject.SetActive(state == GameState.Replay);
             replayAction.gameObject.SetActive(game.HasReplay);
             selectedCar.text = game.Vehicle.DisplayName.ToUpperInvariant();
@@ -159,6 +187,7 @@ namespace Nightshift
             if (!refreshed || previous != state)
             {
                 if (state == GameState.Menu) input.SetSelectedGameObject(mainAction.gameObject);
+                else if (state == GameState.DuelSetup) input.SetSelectedGameObject(duelButtons[(int)game.Difficulty].gameObject);
                 else if (state == GameState.Paused) input.SetSelectedGameObject(resumeAction.gameObject);
                 else if (state == GameState.GameOver) input.SetSelectedGameObject(restartAction.gameObject);
                 else if (state == GameState.Replay) input.SetSelectedGameObject(replayExit.gameObject);
@@ -201,12 +230,56 @@ namespace Nightshift
             nitroFill.rectTransform.sizeDelta = new Vector2(252 * game.Nitro / 100, 8);
             toast.gameObject.SetActive(game.MessageVisible);
             toast.text = game.Message;
-            eventTitle.text = game.Mode == RunMode.Duel ? $"MIDNIGHT DUEL   {Mathf.CeilToInt(game.TimeLeft):00}s"
+            eventTitle.text = game.Mode == RunMode.Duel
+                ? $"MIDNIGHT DUEL · {game.Difficulty.ToString().ToUpperInvariant()}   {Mathf.CeilToInt(game.TimeLeft):00}s"
                 : game.Mode == RunMode.TimeTrial ? $"TIME TRIAL   {game.RunTime:0.00}s" : "";
-            eventDetail.text = game.Mode == RunMode.Duel ? $"{game.RivalName.ToUpperInvariant()}    {game.RivalGap:+0;-0;0} M"
+            eventDetail.text = game.Mode == RunMode.Duel
+                ? $"{game.RivalName.ToUpperInvariant()}  {game.RivalGap:+0;-0;0} M   •   NITRO {game.RivalNitro:0}%"
+                    + (game.RivalBoosting ? "  BOOSTING" : "")
                 : game.Mode == RunMode.TimeTrial ? $"{game.Distance / 1000:0.00}/{game.TrialLength / 1000:0.00} KM"
                     + (game.HasGhost ? $"    GHOST {game.GhostDelta:+0.0;-0.0;0.0}s" : "    SET YOUR FIRST GHOST") : "";
             draftStatus.text = game.Drafting ? "SLIPSTREAM   •   NITRO RECHARGING" : game.Combo > 1 ? $"CLEAN PASS COMBO  ×{game.Combo}" : "";
+        }
+
+        Button[] ActiveOptions()
+        {
+            var buttons = game.State switch
+            {
+                GameState.Menu => mainButtons,
+                GameState.DuelSetup => duelButtons,
+                GameState.Paused => pauseButtons,
+                GameState.GameOver => resultButtons,
+                GameState.Replay => replayButtons,
+                _ => Array.Empty<Button>()
+            };
+            return buttons.Where(button => button.gameObject.activeInHierarchy && button.IsInteractable()).ToArray();
+        }
+
+        public void Navigate(int dx, int dy, int step = 0)
+        {
+            if (game.State == GameState.Garage)
+            {
+                garage.Navigate(dx, dy, step);
+                return;
+            }
+            var buttons = ActiveOptions();
+            int current = Array.FindIndex(buttons, button => button.gameObject == input.currentSelectedGameObject);
+            int columns = game.State == GameState.Menu || game.State == GameState.DuelSetup ? 3 : buttons.Length;
+            int index = MenuNavigation.Move(current, buttons.Length, columns, dx, dy, step);
+            if (index >= 0) input.SetSelectedGameObject(buttons[index].gameObject);
+        }
+
+        public void Confirm()
+        {
+            if (game.State == GameState.Garage)
+            {
+                garage.Confirm();
+                return;
+            }
+            var buttons = ActiveOptions();
+            var selected = Array.Find(buttons, button => button.gameObject == input.currentSelectedGameObject)
+                ?? buttons.FirstOrDefault();
+            selected?.onClick.Invoke();
         }
 
         public void Dispose() => garage.Dispose();
@@ -245,7 +318,7 @@ namespace Nightshift
             label.raycastTarget = false;
             Button button = background.gameObject.AddComponent<Button>();
             button.targetGraphic = background;
-            var colors = button.colors; colors.selectedColor = new Color(.79f,.88f,1); colors.highlightedColor = new Color(.87f,.97f,1);
+            var colors = button.colors; colors.selectedColor = primary ? new Color(.79f,.88f,1) : new Color(.23f,.45f,.53f); colors.highlightedColor = primary ? new Color(.87f,.97f,1) : new Color(.26f,.48f,.55f);
             colors.pressedColor = new Color(.68f,.79f,.83f); button.colors = colors;
             button.onClick.AddListener(click);
             return button;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,6 +11,8 @@ namespace Nightshift
         readonly UIDocument document;
         readonly string[] statNames = { "Speed", "Maneuver", "Nitro", "Brake" };
         readonly VisualTreeAsset layout;
+        readonly List<Button> keyboardItems = new List<Button>();
+        int focusIndex;
 
         public GaragePanel(GameManager game)
         {
@@ -41,6 +44,9 @@ namespace Nightshift
                 garage.styleSheets.Add(Resources.Load<StyleSheet>("Nightshift/Garage/GarageStyle"));
                 var choices = root.Q<VisualElement>("vehicles");
                 choices.Clear();
+                keyboardItems.Clear();
+                root.UnregisterCallback<KeyDownEvent>(SuppressNativeNavigation, TrickleDown.TrickleDown);
+                root.RegisterCallback<KeyDownEvent>(SuppressNativeNavigation, TrickleDown.TrickleDown);
                 for (int i = 0; i < game.Vehicles.Count; i++)
                 {
                     int selected = i;
@@ -49,11 +55,24 @@ namespace Nightshift
                     button.tooltip = spec.DisplayName;
                     button.AddToClassList("car-choice");
                     choices.Add(button);
+                    AddKeyboardItem(button);
+                }
+                var paints = root.Q<VisualElement>("paints");
+                paints.Clear();
+                for (int i = 0; i < game.PaintCount; i++)
+                {
+                    int selected = i;
+                    var button = new Button(() => game.SelectPaint(selected)) { name = "paint-" + i, tooltip = game.PaintName(i) };
+                    button.AddToClassList("paint-choice");
+                    button.style.backgroundColor = game.PaintColor(i);
+                    paints.Add(button);
+                    AddKeyboardItem(button);
                 }
                 var back = root.Q<Button>("done");
                 back.clicked -= game.CloseGarage;
                 back.clicked += game.CloseGarage;
-                root.Q<Button>("vehicle-" + game.VehicleIndex).Focus();
+                AddKeyboardItem(back);
+                Focus(game.VehicleIndex);
             }
 
             var vehicle = game.Vehicle;
@@ -62,6 +81,15 @@ namespace Nightshift
             root.Q<Label>("description").text = vehicle.description;
             for (int i = 0; i < game.Vehicles.Count; i++)
                 root.Q<Button>("vehicle-" + i).EnableInClassList("chosen", i == game.VehicleIndex);
+
+            int paint = game.PaintIndex;
+            root.Q<Label>("paint-name").text = game.PaintName(paint);
+            for (int i = 0; i < game.PaintCount; i++)
+            {
+                var swatch = root.Q<Button>("paint-" + i);
+                swatch.EnableInClassList("paint-selected", i == paint);
+                swatch.text = i == paint ? "✓" : "";
+            }
 
             var ratings = vehicle.Ratings();
             string[] stats = { $"{Mathf.RoundToInt(vehicle.TopKmh)} km/h", $"{vehicle.handling:0}/90",
@@ -72,6 +100,47 @@ namespace Nightshift
                 root.Q<VisualElement>(name + "-fill").style.width = Length.Percent(ratings[i] * 100);
                 root.Q<Label>(name + "-value").text = stats[i];
             }
+        }
+
+        static void SuppressNativeNavigation(KeyDownEvent evt)
+        {
+            switch (evt.keyCode)
+            {
+                case KeyCode.UpArrow:
+                case KeyCode.DownArrow:
+                case KeyCode.LeftArrow:
+                case KeyCode.RightArrow:
+                case KeyCode.Tab:
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                case KeyCode.Space:
+                    evt.StopImmediatePropagation();
+                    break;
+            }
+        }
+
+        void AddKeyboardItem(Button button)
+        {
+            int index = keyboardItems.Count;
+            keyboardItems.Add(button);
+            button.RegisterCallback<FocusInEvent>(_ => focusIndex = index);
+        }
+
+        void Focus(int index)
+        {
+            if (index < 0 || index >= keyboardItems.Count) return;
+            focusIndex = index;
+            keyboardItems[index].Focus();
+        }
+
+        public void Navigate(int dx, int dy, int step) =>
+            Focus(MenuNavigation.Move(focusIndex, keyboardItems.Count, 3, dx, dy, step));
+
+        public void Confirm()
+        {
+            if (focusIndex < game.Vehicles.Count) game.SelectVehicle(focusIndex);
+            else if (focusIndex < game.Vehicles.Count + game.PaintCount) game.SelectPaint(focusIndex - game.Vehicles.Count);
+            else game.CloseGarage();
         }
 
         public void Dispose() => Object.Destroy(settings);

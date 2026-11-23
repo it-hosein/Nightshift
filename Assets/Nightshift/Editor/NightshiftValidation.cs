@@ -48,11 +48,13 @@ namespace Nightshift.EditorTools
 
                 var input = (InputActionAsset)config.FindProperty("controls").objectReferenceValue;
                 foreach (string action in new[]
-                    { "Driving/LaneLeft", "Driving/LaneRight", "Driving/Nitro", "Driving/Brake", "Menu/Pause", "Menu/Mute" })
+                    { "Driving/LaneLeft", "Driving/LaneRight", "Driving/Nitro", "Driving/Brake", "Menu/Pause", "Menu/Mute",
+                      "Menu/NavigateUp", "Menu/NavigateDown", "Menu/NavigateLeft", "Menu/NavigateRight",
+                      "Menu/NavigateTab", "Menu/Confirm", "Menu/Back" })
                     Require(input.FindAction(action, true).bindings.Count > 0, $"There are no bindings for {action}.");
 
                 var catalog = (NightMaterials)config.FindProperty("art").objectReferenceValue;
-                Require(catalog.Paints.Length == 6 && catalog.Paints.All(paint => paint != null),
+                Require(catalog.VehicleTrim != null && catalog.Paints.Length == 6 && catalog.Paints.All(paint => paint != null),
                     "Assign six vehicle paint materials in the NightMaterials asset.");
                 foreach (var item in new[]
                     { catalog.TrafficRig, catalog.HazardLights, catalog.Coin, catalog.Fuel, catalog.Heart,
@@ -92,12 +94,28 @@ namespace Nightshift.EditorTools
                 var model = Resources.Load<GameObject>("Nightshift/" + car.resourceName);
                 Require(model != null && model.GetComponentsInChildren<Renderer>(true).Length > 0,
                     $"No imported renderers for {car.DisplayName}.");
+                var details = Resources.Load<GameObject>("Nightshift/VehicleDetails/" + car.resourceName);
+                Require(details != null && details.GetComponentsInChildren<Renderer>(true).Any(r => r.name.StartsWith("Detail Head"))
+                    && details.GetComponentsInChildren<Renderer>(true).Any(r => r.name.StartsWith("Detail Tail")),
+                    $"Missing lamp detail meshes for {car.DisplayName}.");
+                var parts = model.GetComponentsInChildren<Transform>(true).Concat(details.GetComponentsInChildren<Transform>(true));
+                foreach (string wheel in new[] { "wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr" })
+                    Require(parts.Count(part => part.name.Equals(wheel, StringComparison.OrdinalIgnoreCase)
+                        && part.GetComponentsInChildren<Renderer>(true).Length > 0) == 1,
+                        $"Expected one usable {wheel} pivot for {car.DisplayName}.");
                 Require(car.nitroUse > 0 && car.handling > 0 && car.braking > 0 && car.topSpeed > 70,
                     $"Invalid driving parameters for {car.DisplayName}.");
             }
             Require(expansion.rivals != null && expansion.rivals.Length >= 2
                 && expansion.rivals.All(r => r != null && r.vehicle != null && r.reactionTime > 0 && r.foresight > r.clearance),
                 "Assign a usable profile for each duel rival.");
+            Require(expansion.difficulty != null && expansion.difficulty.Length == 3
+                && expansion.difficulty.All(d => d != null && d.reactionScale > 0 && d.boostGain > 0 && d.recharge > 0)
+                && expansion.difficulty[0].paceOffset < expansion.difficulty[1].paceOffset
+                && expansion.difficulty[1].paceOffset < expansion.difficulty[2].paceOffset,
+                "Assign ordered Easy, Medium and Hard settings.");
+            Require(expansion.garageLighting != null && expansion.garageLighting.GetComponentsInChildren<Light>(true).Length > 0,
+                "The garage lighting prefab is missing.");
             var audio = expansion.audioMixer;
             Require(audio != null && expansion.passBy != null && audio.FindSnapshot("Driving") != null
                 && audio.FindSnapshot("Replay") != null, "The driving audio mixer or pass clip is missing.");
@@ -113,7 +131,8 @@ namespace Nightshift.EditorTools
             Require(layout != null && Resources.Load<StyleSheet>(garage + "GarageStyle") != null
                 && Resources.Load<ThemeStyleSheet>(garage + "GarageTheme") != null, "The Garage UI Toolkit assets are missing.");
             var tree = layout.CloneTree();
-            Require(tree.Q<Button>("done") != null && tree.Q<VisualElement>("vehicles") != null,
+            Require(tree.Q<Button>("done") != null && tree.Q<VisualElement>("vehicles") != null
+                && tree.Q<VisualElement>("paints") != null && tree.Q<Label>("paint-name") != null,
                 "The garage layout is missing its buttons.");
             foreach (string stat in new[] { "Speed", "Maneuver", "Nitro", "Brake" })
                 Require(tree.Q<VisualElement>(stat + "-fill") != null && tree.Q<Label>(stat + "-value") != null,

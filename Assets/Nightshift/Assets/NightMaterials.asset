@@ -46,3 +46,4 @@ MonoBehaviour:
   TunnelLight: {fileID: 100001, guid: 00c967aa6731d231024052df043f7b90, type: 3}
   RouteSign: {fileID: 100001, guid: edfab1140f4b83937ee084441be0dccc, type: 3}
   BridgeSign: {fileID: 100001, guid: d1c25076ffe491ff5e57eaa1a9f02112, type: 3}
+  VehicleTrim: {fileID: 2100000, guid: 06c3b6894542b8da95f6dda2cfffbe5c, type: 2}

@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 namespace Nightshift
 {
-    public enum GameState { Menu, Playing, Paused, GameOver, Garage, Replay }
+    public enum GameState { Menu, Playing, Paused, GameOver, Garage, Replay, DuelSetup }
     public enum PickupKind { Coin, Fuel, Heart }
 
     public sealed partial class GameManager : MonoBehaviour
@@ -74,6 +74,7 @@ namespace Nightshift
             var savedVehicle = PlayerPrefs.GetString("nightshift-garage");
             vehicleIndex = Mathf.Max(0, Array.FindIndex(expansion.vehicles, v => v.id == savedVehicle));
             driver = new DriverRig(playerRig, art, true, Vehicle.paint, Vehicle);
+            driver.SetPaint(art.Paints[PaintIndex]);
             cruising = new ObjectPool<TrafficObstacle>(11, i => NewTraffic(i, false), item => !item.Active);
             moving = new ObjectPool<TrafficObstacle>(14, i => NewTraffic(i + 2, true), item => !item.Active);
             stationary = new ObjectPool<TrafficObstacle>(3, i =>
@@ -110,6 +111,17 @@ namespace Nightshift
             brake = driving.FindAction("Brake", true);
             menus.FindAction("Pause", true).performed += _ => TogglePause();
             menus.FindAction("Mute", true).performed += _ => ToggleMute();
+            menus.FindAction("NavigateUp", true).performed += _ => hud?.Navigate(0, -1);
+            menus.FindAction("NavigateDown", true).performed += _ => hud?.Navigate(0, 1);
+            menus.FindAction("NavigateLeft", true).performed += _ => hud?.Navigate(-1, 0);
+            menus.FindAction("NavigateRight", true).performed += _ => hud?.Navigate(1, 0);
+            menus.FindAction("NavigateTab", true).performed += _ =>
+                hud?.Navigate(0, 0, Keyboard.current?.shiftKey.isPressed == true ? -1 : 1);
+            menus.FindAction("Confirm", true).performed += _ => hud?.Confirm();
+            menus.FindAction("Back", true).performed += _ =>
+            {
+                if (State != GameState.Playing) TogglePause();
+            };
             menus.Enable();
         }
 
@@ -141,7 +153,8 @@ namespace Nightshift
         {
             if (State == GameState.Playing) { CommitScore(); Change(GameState.Paused); }
             else if (State == GameState.Paused) Change(GameState.Playing);
-            else if (State == GameState.Garage) Change(GameState.Menu);
+            else if (State == GameState.Garage || State == GameState.DuelSetup) Change(GameState.Menu);
+            else if (State == GameState.GameOver) ToMenu();
             else if (State == GameState.Replay) StopReplay();
         }
 
@@ -168,7 +181,10 @@ namespace Nightshift
             State = state;
             if (state == GameState.Playing) driving.Enable();
             else driving.Disable();
-            effects.SetPaused(state == GameState.Paused || state == GameState.GameOver || state == GameState.Replay);
+            bool effectsPaused = state == GameState.Paused || state == GameState.GameOver || state == GameState.Replay;
+            effects.SetPaused(effectsPaused);
+            rivalEffects.SetPaused(effectsPaused || Mode != RunMode.Duel);
+            garageLighting.SetActive(state == GameState.Garage);
             audioRig.SetReplay(state == GameState.Replay);
             hud.Refresh();
         }
@@ -203,7 +219,7 @@ namespace Nightshift
         void Update()
         {
             float dt = Mathf.Min(Time.unscaledDeltaTime, .11f);
-            if (State == GameState.Menu || State == GameState.Garage)
+            if (State == GameState.Menu || State == GameState.Garage || State == GameState.DuelSetup)
             {
                 Position(dt); audioRig.Tick(Speed, false, false); return;
             }
@@ -223,6 +239,7 @@ namespace Nightshift
             if (State == GameState.Playing)
             {
                 effects.Exhaust(dt, elapsed, Speed, boosting && !braking);
+                if (rival != null) rivalEffects.Exhaust(dt, elapsed, rival.Speed, rival.Boosting);
                 fireworks.Update(elapsed, Distance, Speed);
             }
             if (State == GameState.Playing) replay.Capture(elapsed, Distance);
@@ -261,8 +278,12 @@ namespace Nightshift
             hitTime = Mathf.Max(0, hitTime - 1.66f * dt);
             toast = Mathf.Max(0, toast - dt);
             float handling = Vehicle.handling;
-            lateral += ((lane * Route.Lane - x) * handling - lateral * (13 * Mathf.Sqrt(handling / 64))) * dt;
+            playerRecovery = Mathf.Max(0, playerRecovery - dt);
+            float steering = playerRecovery > 0 ? handling * .24f : handling;
+            float damping = playerRecovery > 0 ? 5 : 13 * Mathf.Sqrt(handling / 64);
+            lateral += ((lane * Route.Lane - x) * steering - lateral * damping) * dt;
             x += lateral * dt;
+            if (Mode == RunMode.Duel) x = Mathf.Clamp(x, -DuelContact.RoadLimit, DuelContact.RoadLimit);
             if (Fuel <= 0) { End("Out of fuel"); return; }
             if (Mode != RunMode.TimeTrial) SpawnRows();
             UpdateItems(dt, old, oldX, true);
@@ -430,7 +451,7 @@ namespace Nightshift
                 chase.fieldOfView = 48;
                 return;
             }
-            if (State == GameState.Menu)
+            if (State == GameState.Menu || State == GameState.DuelSetup)
             {
                 float t = Time.unscaledTime;
                 chase.transform.localPosition = new Vector3(4.7f + Mathf.Sin(t * .53f), 2.55f, -6.1f);

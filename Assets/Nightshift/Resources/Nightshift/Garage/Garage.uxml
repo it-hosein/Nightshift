@@ -16,6 +16,9 @@
                 <ui:VisualElement class="stat-heading"><ui:Label text="BRAKING" /><ui:Label name="Brake-value" class="value" /></ui:VisualElement>
                 <ui:VisualElement class="track"><ui:VisualElement name="Brake-fill" class="fill brake" /></ui:VisualElement>
             </ui:VisualElement>
+            <ui:VisualElement class="paint-heading"><ui:Label text="BODY COLOR" /><ui:Label name="paint-name" class="value" /></ui:VisualElement>
+            <ui:VisualElement name="paints" class="paint-grid" />
+            <ui:Label text="ARROWS / TAB   SELECT    ENTER   APPLY" class="keyboard-hint" />
             <ui:Button name="done" text="RETURN TO MAIN MENU" class="primary-action" />
         </ui:VisualElement>
     </ui:VisualElement>

@@ -11,18 +11,27 @@ namespace Nightshift
         readonly bool[] trialCleared = new bool[TrialRows];
         DrivingExpansion expansion;
         MidnightRival rival;
+        NightParticles rivalEffects;
+        GameObject garageLighting;
         DriverRig rivalRig, ghostRig;
         TrialGhost ghost;
         OvertakeReplay replay;
         int vehicleIndex, rivalIndex = -1, combo;
         bool drafted, duelRivalPassed;
-        float comboUntil, rivalContactCooldown;
+        float comboUntil, rivalContactCooldown, playerRecovery;
         double lastPassSoundDistance;
 
         public RunMode Mode { get; private set; }
         public VehicleSpec Vehicle => expansion.vehicles[vehicleIndex];
         public IReadOnlyList<VehicleSpec> Vehicles => expansion.vehicles;
         public int VehicleIndex => vehicleIndex;
+        public int PaintCount => art.Paints.Length;
+        public int PaintIndex => Mathf.Clamp(PlayerPrefs.GetInt("nightshift-paint-" + Vehicle.id, Vehicle.paint), 0, PaintCount - 1);
+        public Color PaintColor(int index) => art.Paints[index].color;
+        public string PaintName(int index) => art.Paints[index].name;
+        public DuelDifficulty Difficulty { get; private set; } = DuelDifficulty.Medium;
+        public float RivalNitro => rival?.Nitro ?? 0;
+        public bool RivalBoosting => rival != null && rival.Boosting;
         public float TimeLeft => Mathf.Max(0, expansion.duelDuration - elapsed);
         public float RunTime => elapsed;
         public float TrialLength => expansion.trialDistance;
@@ -39,6 +48,9 @@ namespace Nightshift
         void PrepareModes()
         {
             rivalRig = NewTrafficRig(2);
+            rivalEffects = new NightParticles(transform, art, rivalRig.ExhaustMount);
+            garageLighting = Instantiate(expansion.garageLighting, playerRig);
+            garageLighting.SetActive(false);
             ghostRig = NewTrafficRig(2);
             ghostRig.SetGhostMaterial(expansion.ghostMaterial);
             ghost = new TrialGhost(ghostRig);
@@ -52,7 +64,7 @@ namespace Nightshift
             foreach (var pickup in coins.Items) actors.Add(pickup.VisualRoot);
             foreach (var pickup in fuels.Items) actors.Add(pickup.VisualRoot);
             foreach (var pickup in hearts.Items) actors.Add(pickup.VisualRoot);
-            replay = new OvertakeReplay(chase, actors.ToArray(), highway, expansion.replayShots);
+            replay = new OvertakeReplay(chase, actors.ToArray(), highway, expansion.replayShots, driver, rivalRig);
         }
 
         public void OpenGarage()
@@ -69,18 +81,37 @@ namespace Nightshift
         {
             if (State != GameState.Garage || index < 0 || index >= Vehicles.Count || vehicleIndex == index) return;
             vehicleIndex = index;
-            driver.Equip(art, Vehicle.resourceName, Vehicle.paint);
+            driver.Equip(art, Vehicle.resourceName, PaintIndex);
             PlayerPrefs.SetString("nightshift-garage", Vehicle.id);
             PlayerPrefs.Save();
             hud.Refresh();
         }
 
-        public void StartDuel() => StartMode(RunMode.Duel);
+        public void SelectPaint(int index)
+        {
+            if (State != GameState.Garage || index < 0 || index >= PaintCount || index == PaintIndex) return;
+            PlayerPrefs.SetInt("nightshift-paint-" + Vehicle.id, index);
+            PlayerPrefs.Save();
+            driver.SetPaint(art.Paints[index]);
+            hud.Refresh();
+        }
+
+        public void OpenDuelSetup()
+        {
+            if (State == GameState.Menu) Change(GameState.DuelSetup);
+        }
+
+        public void StartDuel(DuelDifficulty difficulty)
+        {
+            if (State != GameState.DuelSetup) return;
+            Difficulty = difficulty;
+            StartMode(RunMode.Duel);
+        }
         public void StartTimeTrial() => StartMode(RunMode.TimeTrial);
 
         void StartMode(RunMode mode)
         {
-            if (State != GameState.Menu) return;
+            if (State != (mode == RunMode.Duel ? GameState.DuelSetup : GameState.Menu)) return;
             CommitScore();
             Mode = mode;
             record = PlayerPrefs.GetInt(RecordKey, 0);
@@ -106,7 +137,8 @@ namespace Nightshift
             replay.Reset();
             combo = 0;
             comboUntil = 0;
-            rivalContactCooldown = 0;
+            rivalContactCooldown = playerRecovery = 0;
+            rivalEffects.Clear();
             lastPassSoundDistance = double.NegativeInfinity;
             drafted = duelRivalPassed = false;
             rival = null;
@@ -116,12 +148,12 @@ namespace Nightshift
             {
                 var spec = expansion.rivals[rivalIndex];
                 rivalRig.Equip(art, spec.vehicle.resourceName, spec.vehicle.paint);
-                rival = new MidnightRival(rivalRig, spec);
+                rival = new MidnightRival(rivalRig, spec, expansion.difficulty[(int)Difficulty]);
                 rival.Position(0);
             }
             if (Mode == RunMode.TimeTrial)
             {
-                ghostRig.Equip(art, Vehicle.resourceName, Vehicle.paint);
+                ghostRig.Equip(art, Vehicle.resourceName, PaintIndex);
                 ghostRig.SetGhostMaterial(expansion.ghostMaterial);
                 ghost.Begin(Vehicle.id, expansion.trialDistance);
                 ghost.Capture(0, 0, 0, 0);
@@ -171,18 +203,26 @@ namespace Nightshift
             if (rival != null)
             {
                 float previousGap = (float)(rival.Distance - old);
+                float previousSide = rival.X - oldX;
                 rival.Step(dt, Distance, x, Speed, trafficOrder);
                 float gap = (float)(rival.Distance - Distance);
+                var contact = DuelContact.Resolve(previousGap, gap, previousSide, rival.X - x);
                 rivalContactCooldown -= dt;
-                if (rivalContactCooldown <= 0 && Mathf.Abs((oldX + x) * .5f - rival.X) < 1.76f &&
-                    (Mathf.Abs(gap) < 3.7f || previousGap * gap < 0))
+                if (contact != null && rivalContactCooldown <= 0)
                 {
-                    rivalContactCooldown = 1.3f;
-                    rival.Collision();
-                    Impact();
-                    if (State != GameState.Playing) return;
+                    rivalContactCooldown = 1.06f;
+                    rival.Collision(contact);
+                    lateral = Mathf.Clamp(lateral + contact.PlayerKick, -20, 20);
+                    Speed = Mathf.Max(17, Speed - contact.PlayerLoss);
+                    playerRecovery = .58f;
+                    hitTime = Mathf.Max(hitTime, .24f);
+                    Message = "RIVAL CONTACT";
+                    toast = .85f;
+                    var playerPosition = new Vector3(Route.Center(Distance) + x, Route.Height(Distance), 0);
+                    effects.Crash((rival.Root.position + playerPosition) * .5f + Vector3.up * .42f);
+                    audioRig.Crash();
                 }
-                else if (!duelRivalPassed && previousGap >= 0 && gap < 0)
+                else if (contact == null && !duelRivalPassed && previousGap >= 0 && gap < 0)
                 {
                     duelRivalPassed = true;
                     RegisterPass(Mathf.RoundToInt(rival.X / Route.Lane), true, rival.Root.position);

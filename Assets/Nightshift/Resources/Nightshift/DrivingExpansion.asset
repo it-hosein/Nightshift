@@ -41,3 +41,23 @@ MonoBehaviour:
   draftCharge: 13
   comboWindow: 5
   boostFov: 5
+  garageLighting: {fileID: 100001, guid: c6b6fa89794c687157e2f6a650f61a1c, type: 3}
+  difficulty:
+  - paceOffset: -5
+    reactionScale: 1.33
+    boostGain: 10
+    recharge: 4.5
+    boostCooldown: 5.7
+    boostGap: 19
+  - paceOffset: 0
+    reactionScale: 1
+    boostGain: 14
+    recharge: 6
+    boostCooldown: 4.1
+    boostGap: 11
+  - paceOffset: 5
+    reactionScale: 0.69
+    boostGain: 20
+    recharge: 9
+    boostCooldown: 3.1
+    boostGap: 8
