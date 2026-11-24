@@ -206,23 +206,45 @@ namespace Nightshift
                 float previousSide = rival.X - oldX;
                 rival.Step(dt, Distance, x, Speed, trafficOrder);
                 float gap = (float)(rival.Distance - Distance);
-                var contact = DuelContact.Resolve(previousGap, gap, previousSide, rival.X - x);
+                var contact = DuelContact.Resolve(previousGap, gap, previousSide, rival.X - x, dt);
                 rivalContactCooldown -= dt;
-                if (contact != null && rivalContactCooldown <= 0)
+                if (contact != null)
                 {
-                    rivalContactCooldown = 1.06f;
-                    rival.Collision(contact);
-                    lateral = Mathf.Clamp(lateral + contact.PlayerKick, -20, 20);
-                    Speed = Mathf.Max(17, Speed - contact.PlayerLoss);
-                    playerRecovery = .58f;
-                    hitTime = Mathf.Max(hitTime, .24f);
-                    Message = "RIVAL CONTACT";
-                    toast = .85f;
-                    var playerPosition = new Vector3(Route.Center(Distance) + x, Route.Height(Distance), 0);
-                    effects.Crash((rival.Root.position + playerPosition) * .5f + Vector3.up * .42f);
-                    audioRig.Crash();
+                    if (rivalContactCooldown <= 0)
+                    {
+                        rivalContactCooldown = .48f;
+                        rival.Collision(contact);
+                        lateral = Mathf.Clamp(lateral + contact.PlayerKick, -20, 20);
+                        Speed = Mathf.Max(12, Speed - contact.PlayerLoss);
+                        playerRecovery = .42f;
+                        hitTime = Mathf.Max(hitTime, .24f);
+                        Message = "RIVAL CONTACT";
+                        toast = .85f;
+                        var playerPosition = new Vector3(Route.Center(Distance) + x, Route.Height(Distance), 0);
+                        effects.Crash((rival.Root.position + playerPosition) * .5f + Vector3.up * .42f);
+                        audioRig.Crash();
+                    }
+
+                    // Keep the cars separate every step, including during the effects cooldown.
+                    float avoidX = rival.X - contact.SeparationSide * (DuelContact.CarWidth + .012f);
+                    if (contact.Longitudinal || Mathf.Abs(avoidX) > DuelContact.RoadLimit)
+                    {
+                        if (previousGap >= 0)
+                        {
+                            Distance = Math.Min(Distance, rival.Distance - DuelContact.CarSpacing - .012);
+                            Speed = Mathf.Min(Speed, rival.Speed);
+                        }
+                        else Distance = Math.Max(Distance, rival.Distance + DuelContact.CarSpacing + .012);
+                    }
+                    else
+                    {
+                        x = avoidX;
+                        lateral = contact.SeparationSide > 0 ? Mathf.Min(lateral, 0) : Mathf.Max(lateral, 0);
+                    }
+
+                    rival.Position(Distance);
                 }
-                else if (contact == null && !duelRivalPassed && previousGap >= 0 && gap < 0)
+                else if (!duelRivalPassed && previousGap >= 0 && gap < 0)
                 {
                     duelRivalPassed = true;
                     RegisterPass(Mathf.RoundToInt(rival.X / Route.Lane), true, rival.Root.position);

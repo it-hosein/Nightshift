@@ -95,10 +95,14 @@ namespace Nightshift.EditorTools
                 Require(model != null && model.GetComponentsInChildren<Renderer>(true).Length > 0,
                     $"No imported renderers for {car.DisplayName}.");
                 var details = Resources.Load<GameObject>("Nightshift/VehicleDetails/" + car.resourceName);
-                Require(details != null && details.GetComponentsInChildren<Renderer>(true).Any(r => r.name.StartsWith("Detail Head"))
-                    && details.GetComponentsInChildren<Renderer>(true).Any(r => r.name.StartsWith("Detail Tail")),
-                    $"Missing lamp detail meshes for {car.DisplayName}.");
-                var parts = model.GetComponentsInChildren<Transform>(true).Concat(details.GetComponentsInChildren<Transform>(true));
+                var lens = car.resourceName == "MercedesAMG" ? model
+                    : Resources.Load<GameObject>("Nightshift/VehicleLamps/" + car.resourceName);
+                Require(lens != null, $"Missing headlamp modules for {car.DisplayName}.");
+                foreach (string side in new[] { "L", "R" })
+                    Require(lens.GetComponentsInChildren<Renderer>(true).Count(r => r.name == "Headlamp Emitter " + side) == 1,
+                        $"Expected one {side} headlamp emitter on {car.DisplayName}.");
+                var parts = model.GetComponentsInChildren<Transform>(true).AsEnumerable();
+                if (details != null) parts = parts.Concat(details.GetComponentsInChildren<Transform>(true));
                 foreach (string wheel in new[] { "wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr" })
                     Require(parts.Count(part => part.name.Equals(wheel, StringComparison.OrdinalIgnoreCase)
                         && part.GetComponentsInChildren<Renderer>(true).Length > 0) == 1,

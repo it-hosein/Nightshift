@@ -86,7 +86,7 @@ namespace Nightshift
             else if (recovery <= 0) Nitro = Mathf.Min(100, Nitro + tuning.recharge * dt);
 
             float target = Mathf.Min(cruise, slowest);
-            float response = target < Speed ? 5 : recovery > 0 ? .26f : .85f;
+            float response = recovery > 0 && float.IsPositiveInfinity(slowest) ? .26f : target < Speed ? 5 : .85f;
             Speed = Mathf.Lerp(Speed, target, 1 - Mathf.Exp(-dt * response));
             Distance += Speed * (double)dt;
             lateral += ((lane * Route.Lane - X) * (recovery > 0 ? 9 : 48) - lateral * (recovery > 0 ? 5 : 13)) * dt;
@@ -104,7 +104,7 @@ namespace Nightshift
 
         public void Collision(DuelContact contact)
         {
-            Speed = Mathf.Max(14, Speed - contact.RivalLoss);
+            Speed = Mathf.Clamp(Speed + contact.RivalSpeedChange, 14, 105);
             lateral = Mathf.Clamp(lateral + contact.RivalKick, -20, 20);
             recovery = contact.RivalRecovery;
             cooldown = Mathf.Max(cooldown, recovery + .25f);

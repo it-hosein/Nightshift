@@ -106,21 +106,27 @@ namespace Nightshift
                 new Vector2(500,27), 18, Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             menu = Panel("Main menu");
-            Label(menu,"MOUNTAIN ROUTE   /   00:42 AM",new Vector2(0,.5f),new Vector2(305,169),new Vector2(418,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
-            Label(menu,"NIGHTSHIFT",new Vector2(0,.5f),new Vector2(490,88),new Vector2(792,127),111,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
-            Label(menu,"I N F I N I T E   H I G H W A Y",new Vector2(0,.5f),new Vector2(365,15),new Vector2(526,40),27,Type,TextAnchor.MiddleLeft);
-            Label(menu,"Thread through midnight traffic. Collect coins,\nrefuel on the move and keep the run alive.",new Vector2(0,.5f),
-                new Vector2(365,-55),new Vector2(526,68),21,Muted,TextAnchor.MiddleLeft);
-            mainAction = Action(menu,"START DRIVE",new Vector2(0,.5f),new Vector2(201,-132),new Vector2(198,53),true,game.StartRun);
-            var duel = Action(menu,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(411,-132),new Vector2(198,53),false,game.OpenDuelSetup);
-            var timeTrial = Action(menu,"TIME TRIAL",new Vector2(0,.5f),new Vector2(621,-132),new Vector2(198,53),false,game.StartTimeTrial);
-            var openGarage = Action(menu,"GARAGE",new Vector2(0,.5f),new Vector2(201,-196),new Vector2(198,53),false,game.OpenGarage);
-            var course = Action(menu,"COURSE MODE", new Vector2(0,.5f),new Vector2(411,-196),new Vector2(198,53),false,game.ToggleCourseMode);
-            var exit = Action(menu,"EXIT",new Vector2(0,.5f),new Vector2(621,-196),new Vector2(198,53),false,game.Exit);
+            var mainAnchor = new Vector2(0, .5f);
+            Label(menu,"NIGHTSHIFT",mainAnchor,new Vector2(456,280),new Vector2(736,110),
+                96,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
+            Label(menu,"INFINITE HIGHWAY",mainAnchor,new Vector2(340,207),new Vector2(502,38),
+                24,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
+            ImageArea("Menu separator",menu,mainAnchor,new Vector2(342,174),new Vector2(506,2),
+                new Color(.55f,.78f,.77f,.62f),false);
+            var menuCard = new Vector2(510,66);
+            mainAction = Action(menu,"START DRIVE",mainAnchor,new Vector2(345,121),menuCard,true,game.StartRun,
+                "Endless traffic run");
+            var duel = Action(menu,"MIDNIGHT DUEL",mainAnchor,new Vector2(345,47),menuCard,false,game.OpenDuelSetup,
+                "90 seconds against a rival");
+            var timeTrial = Action(menu,"TIME TRIAL",mainAnchor,new Vector2(345,-27),menuCard,false,game.StartTimeTrial,
+                "2.4 km against your best run");
+            var openGarage = Action(menu,"GARAGE",mainAnchor,new Vector2(345,-101),menuCard,false,game.OpenGarage,
+                "Choose a car and body color");
+            var course = Action(menu,"COURSE MODE",mainAnchor,new Vector2(345,-166),new Vector2(510,50),false,game.ToggleCourseMode);
+            var exit = Action(menu,"EXIT GAME",mainAnchor,new Vector2(345,-224),new Vector2(510,50),false,game.Exit);
             courseMode = course.GetComponentInChildren<Text>();
-            Label(menu,"A / D   CHANGE LANES     W   NITRO     S   BRAKE     ESC   PAUSE",new Vector2(0,0),new Vector2(419,45),
-                new Vector2(632,30),16,Muted,TextAnchor.MiddleLeft);
-            selectedCar = Label(menu,"",new Vector2(1,0),new Vector2(-285,62),new Vector2(500,45),28,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
+            selectedCar = Label(menu,"",new Vector2(1,0),new Vector2(-314,64),new Vector2(575,48),
+                26,Type,TextAnchor.MiddleRight,FontStyle.BoldAndItalic);
 
             duelSetup = Panel("Duel difficulty");
             Label(duelSetup,"MIDNIGHT DUEL",new Vector2(0,.5f),new Vector2(482,60),new Vector2(760,112),
@@ -137,19 +143,24 @@ namespace Nightshift
                 game.TogglePause);
 
             paused = Panel("Pause menu");
-            Label(paused,"RUN SUSPENDED",new Vector2(0,.5f),new Vector2(303,98),new Vector2(408,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
-            Label(paused,"PAUSED",new Vector2(0,.5f),new Vector2(477,20),new Vector2(758,118),96,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
-            resumeAction = Action(paused,"RESUME",new Vector2(0,.5f),new Vector2(173,-82),new Vector2(151,53),true,game.TogglePause);
-            var restart = Action(paused,"RESTART",new Vector2(0,.5f),new Vector2(347,-82),new Vector2(151,53),false,game.StartRun);
-            var pauseBack = Action(paused,"MAIN MENU",new Vector2(0,.5f),new Vector2(521,-82),new Vector2(151,53),false,game.ToMenu);
+            var center = new Vector2(.5f,.5f);
+            ModalCard(paused, 530, 402);
+            Label(paused,"PAUSED",center,new Vector2(0,132),new Vector2(442,70),
+                59,Type,TextAnchor.MiddleCenter,FontStyle.BoldAndItalic);
+            resumeAction = Action(paused,"RESUME RACE",center,new Vector2(0,40),new Vector2(392,57),true,game.TogglePause);
+            var restart = Action(paused,"RESTART",center,new Vector2(0,-26),new Vector2(392,57),false,game.StartRun);
+            var pauseBack = Action(paused,"MAIN MENU",center,new Vector2(0,-92),new Vector2(392,57),false,game.ToMenu);
+            Label(paused,"ESC   RESUME",center,new Vector2(0,-158),new Vector2(380,22),
+                14,Muted,TextAnchor.MiddleCenter);
 
             ended = Panel("Game over");
-            finalReason = Label(ended,"RUN ENDED",new Vector2(0,.5f),new Vector2(303,110),new Vector2(410,32),16,Accent,TextAnchor.MiddleLeft,FontStyle.Bold);
-            Label(ended,"RUN OVER",new Vector2(0,.5f),new Vector2(477,32),new Vector2(758,118),94,Type,TextAnchor.MiddleLeft,FontStyle.BoldAndItalic);
-            finalResult = Label(ended,"",new Vector2(0,.5f),new Vector2(388,-54),new Vector2(580,39),24,Muted,TextAnchor.MiddleLeft);
-            restartAction = Action(ended,"DRIVE AGAIN",new Vector2(0,.5f),new Vector2(188,-120),new Vector2(181,53),true,game.StartRun);
-            var endBack = Action(ended,"MAIN MENU",new Vector2(0,.5f),new Vector2(373,-120),new Vector2(168,53),false,game.ToMenu);
-            replayAction = Action(ended,"WATCH REPLAY",new Vector2(0,.5f),new Vector2(558,-120),new Vector2(183,53),false,game.StartReplay);
+            ModalCard(ended, 630, 432);
+            finalReason = Label(ended,"RUN ENDED",center,new Vector2(0,144),new Vector2(580,65),
+                41,Type,TextAnchor.MiddleCenter,FontStyle.BoldAndItalic);
+            finalResult = Label(ended,"",center,new Vector2(0,77),new Vector2(550,43),20,Accent,TextAnchor.MiddleCenter);
+            restartAction = Action(ended,"DRIVE AGAIN",center,new Vector2(0,5),new Vector2(454,57),true,game.StartRun);
+            var endBack = Action(ended,"MAIN MENU",center,new Vector2(0,-61),new Vector2(454,57),false,game.ToMenu);
+            replayAction = Action(ended,"WATCH REPLAY",center,new Vector2(0,-127),new Vector2(454,57),false,game.StartReplay);
             replay = Full("Replay overlay", screen);
             Label(replay, "OVERTAKE REPLAY", new Vector2(.5f,1), new Vector2(0,-55),
                 new Vector2(435,38), 28, Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -166,7 +177,7 @@ namespace Nightshift
             resultButtons = new[] { restartAction, endBack, replayAction, muteButton };
             replayButtons = new[] { replayExit, muteButton };
             Label(menu, "ARROWS / TAB   SELECT     ENTER   CONFIRM", new Vector2(0,0),
-                new Vector2(419,73),new Vector2(632,24),14,Muted,TextAnchor.MiddleLeft);
+                new Vector2(356,66),new Vector2(534,24),14,Muted,TextAnchor.MiddleLeft);
         }
 
         public void Refresh()
@@ -264,7 +275,7 @@ namespace Nightshift
             }
             var buttons = ActiveOptions();
             int current = Array.FindIndex(buttons, button => button.gameObject == input.currentSelectedGameObject);
-            int columns = game.State == GameState.Menu || game.State == GameState.DuelSetup ? 3 : buttons.Length;
+            int columns = game.State == GameState.DuelSetup ? 3 : 1;
             int index = MenuNavigation.Move(current, buttons.Length, columns, dx, dy, step);
             if (index >= 0) input.SetSelectedGameObject(buttons[index].gameObject);
         }
@@ -296,11 +307,20 @@ namespace Nightshift
             for (int i = 0; i < 128; i++)
             {
                 float alpha = Mathf.Lerp(.97f, 0, Mathf.SmoothStep(0,1,Mathf.Clamp01((i-15)/98f)));
-                tex.SetPixel(i,0,new Color(.022f,.031f,.055f,alpha));
+                tex.SetPixel(i,0,new Color(.022f,.037f,.057f,alpha));
             }
             tex.Apply(false,true);
             shade.sprite = Sprite.Create(tex,new Rect(0,0,128,1),new Vector2(.5f,.5f));
             return panel;
+        }
+
+        void ModalCard(RectTransform root, float width, float height)
+        {
+            var center = new Vector2(.5f, .5f);
+            ImageArea("Dialog backdrop",root,center,Vector2.zero,new Vector2(width,height),
+                new Color(.029f,.053f,.081f,.98f),false);
+            ImageArea("Dialog top rule",root,center,new Vector2(0,height*.5f),new Vector2(width,3),
+                new Color(.58f,.82f,.82f),false);
         }
 
         Text Metric(RectTransform parent, string label, Vector2 at)
@@ -310,16 +330,29 @@ namespace Nightshift
             return Label(parent,"0",Vector2.up,at+new Vector2(62,-40),new Vector2(101,34),26,Type,TextAnchor.MiddleLeft,FontStyle.Bold);
         }
 
-        Button Action(RectTransform root, string text, Vector2 anchor, Vector2 at, Vector2 size,bool primary,UnityEngine.Events.UnityAction click)
+        Button Action(RectTransform root, string text, Vector2 anchor, Vector2 at, Vector2 size,
+            bool primary, UnityEngine.Events.UnityAction click, string description = null)
         {
-            var background = ImageArea(text,root,anchor,at,size,primary ? Accent : Tile,true);
-            var label = Label(background.rectTransform,text,new Vector2(.5f,.5f),Vector2.zero,size,16,
-                primary ? new Color(.054f,.09f,.039f) : Type,TextAnchor.MiddleCenter,FontStyle.Bold);
-            label.raycastTarget = false;
+            var background = ImageArea(text,root,anchor,at,size,Tile,true);
+            var center = new Vector2(.5f, .5f);
+            float innerWidth = Mathf.Max(20, size.x - 40);
+            bool card = description != null;
+            var label = Label(background.rectTransform,text,center,new Vector2(card ? 10 : 0,card ? 10 : 0),
+                new Vector2(innerWidth,28),card ? 20 : 16,Type,
+                card ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter,FontStyle.Bold);
+            Text detail = card ? Label(background.rectTransform,description,center,new Vector2(10,-14),
+                new Vector2(innerWidth,22),15,Muted,TextAnchor.MiddleLeft) : null;
+            var rail = ImageArea("Button leading edge",background.rectTransform,center,
+                new Vector2(-size.x*.5f+2,0),new Vector2(4,size.y),Accent,false);
+            var edge = ImageArea("Button bottom border",background.rectTransform,center,
+                new Vector2(0,-size.y*.5f+1),new Vector2(size.x,2),Accent,false);
+            var arrow = Label(background.rectTransform,"",center,new Vector2(size.x*.5f-13,0),
+                new Vector2(18,25),20,Accent,TextAnchor.MiddleCenter,FontStyle.Bold);
             Button button = background.gameObject.AddComponent<Button>();
             button.targetGraphic = background;
-            var colors = button.colors; colors.selectedColor = primary ? new Color(.79f,.88f,1) : new Color(.23f,.45f,.53f); colors.highlightedColor = primary ? new Color(.87f,.97f,1) : new Color(.26f,.48f,.55f);
-            colors.pressedColor = new Color(.68f,.79f,.83f); button.colors = colors;
+            button.transition = Selectable.Transition.None;
+            var highlight = background.gameObject.AddComponent<MenuButtonHighlight>();
+            highlight.Configure(background, rail, edge, label, detail, arrow, primary);
             button.onClick.AddListener(click);
             return button;
         }

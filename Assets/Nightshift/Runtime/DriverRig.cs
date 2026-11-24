@@ -29,6 +29,7 @@ namespace Nightshift
         readonly List<Renderer> paintwork = new List<Renderer>();
         readonly MaterialPropertyBlock lampProperties = new MaterialPropertyBlock();
         readonly MeshRenderer[] tailReflections;
+        readonly Transform[] headBeams;
         readonly List<Renderer> tailLights = new List<Renderer>(2);
         readonly MeshRenderer courseGlow;
         readonly Light courseLamp;
@@ -44,6 +45,16 @@ namespace Nightshift
             shell = Root.Find("Suspension");
             if (player)
             {
+                headBeams = new[] { Root.Find("Left LED headlight"), Root.Find("Right LED headlight") };
+                foreach (var beam in headBeams)
+                {
+                    beam.SetParent(shell, false);
+                    var lamp = beam.GetComponent<Light>();
+                    lamp.color = new Color(.91f,.94f,1);
+                    lamp.renderMode = LightRenderMode.ForcePixel;
+                }
+                Root.Find("Left headlight reflection").gameObject.SetActive(false);
+                Root.Find("Right headlight reflection").gameObject.SetActive(false);
                 tailReflections = new[] { Root.Find("Left tail reflection").GetComponent<MeshRenderer>(),
                     Root.Find("Right tail reflection").GetComponent<MeshRenderer>() };
                 courseGlow = Root.Find("Course underglow").GetComponent<MeshRenderer>();
@@ -90,6 +101,18 @@ namespace Nightshift
                     }
             }
 
+            var lenses = Resources.Load<GameObject>("Nightshift/VehicleLamps/" + name);
+            if (lenses != null)
+            {
+                var module = UnityEngine.Object.Instantiate(lenses, car);
+                module.transform.localPosition = Vector3.zero;
+            }
+            foreach (var renderer in car.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer.name.StartsWith("Detail Head", StringComparison.OrdinalIgnoreCase))
+                    renderer.enabled = false;
+            }
+
             Transform fl = FindPart(car, "wheel_fl");
             Transform fr = FindPart(car, "wheel_fr");
             Transform rl = FindPart(car, "wheel_rl");
@@ -106,11 +129,12 @@ namespace Nightshift
             AddWheel(fr);
             AddWheel(rl);
             AddWheel(rr);
+            PositionHeadBeams(car);
 
             foreach (var renderer in renderers)
             {
                 string part = renderer.name.ToLowerInvariant();
-                if (part == "body" || part == "paint") paintwork.Add(renderer);
+                if (part == "body" || part == "paint" || part.StartsWith("paint ", StringComparison.Ordinal)) paintwork.Add(renderer);
                 else if (part == "glass") renderer.sharedMaterial = art.Glass;
                 else if (part == "lights_red" || part == "taillights" || part.StartsWith("detail tail", StringComparison.Ordinal)
                     || (name == "Car" && part == "brakes"))
@@ -118,8 +142,10 @@ namespace Nightshift
                     renderer.sharedMaterial = player ? art.PlayerTaillight : art.TrafficTaillight;
                     if (player) tailLights.Add(renderer);
                 }
-                else if (part == "headlights" || part == "lights" || part.StartsWith("detail head", StringComparison.Ordinal))
+                else if (part.StartsWith("headlamp emitter", StringComparison.Ordinal) || part.EndsWith("dipped projector", StringComparison.Ordinal))
                     renderer.sharedMaterial = player ? art.PlayerHeadlight : art.TrafficHeadlight;
+                else if (part == "headlights" || part == "lights")
+                    renderer.sharedMaterial = art.VehicleTrim;
                 else if (part == "rim" || part.StartsWith("rim_", StringComparison.Ordinal)
                     || part.StartsWith("detail metal", StringComparison.Ordinal) || part == "detail fixed rim")
                     renderer.sharedMaterial = art.Metal;
@@ -129,6 +155,33 @@ namespace Nightshift
                     renderer.sharedMaterial = art.VehicleTrim;
             }
             SetPaint(art.Paints[palette % art.Paints.Length]);
+        }
+
+        void PositionHeadBeams(Transform car)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                string side = i == 0 ? "L" : "R";
+                var emitter = FindPart(car, "Headlamp Emitter " + side)?.GetComponent<Renderer>();
+                if (emitter == null) continue;
+                Vector3 socket = shell.InverseTransformPoint(RendererCenter(emitter));
+                float sign = Mathf.Sign(socket.x);
+                if (player)
+                {
+                    var beam = headBeams[sign < 0 ? 0 : 1];
+                    beam.localPosition = socket + new Vector3(0, 0, .045f);
+                    beam.localRotation = Quaternion.LookRotation(new Vector3(sign * .045f, -socket.y / 13, 1));
+                }
+                else
+                {
+                    var reflection = Root.Find((sign < 0 ? "Left" : "Right") + " headlight reflection");
+                    if (reflection != null)
+                    {
+                        reflection.localPosition = new Vector3(socket.x, .034f, socket.z + 5.3f);
+                        reflection.localScale = new Vector3(2.72f, 10.5f, 1);
+                    }
+                }
+            }
         }
 
         public void SetPaint(Material paint)

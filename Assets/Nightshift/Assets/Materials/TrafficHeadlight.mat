@@ -8,11 +8,10 @@ Material:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 8
   m_Name: Traffic low beam
-  m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
+  m_Shader: {fileID: 4800000, guid: 884911d266de93d09c8f84bd9ec45bc0, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - _EMISSION
+  m_ValidKeywords: []
   m_InvalidKeywords: []
   m_LightmapFlags: 2
   m_EnableInstancingVariants: 0
@@ -30,5 +29,5 @@ Material:
     - _Metallic: 0
     m_Colors:
     - _Color: {r: 0.77, g: 0.86, b: 1, a: 1}
-    - _EmissionColor: {r: 2.156, g: 2.408, b: 2.8, a: 1}
+    - _EmissionColor: {r: 0.96, g: 1.15, b: 1.39, a: 1}
   m_BuildTextureStacks: []
