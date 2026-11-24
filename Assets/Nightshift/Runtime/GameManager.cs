@@ -72,6 +72,7 @@ namespace Nightshift
             if (expansion == null || expansion.vehicles.Length == 0)
                 throw new InvalidOperationException("The Nightshift driving catalog is missing.");
             var savedVehicle = PlayerPrefs.GetString("nightshift-garage");
+            if (savedVehicle == "mercedes") savedVehicle = "fordgt";
             vehicleIndex = Mathf.Max(0, Array.FindIndex(expansion.vehicles, v => v.id == savedVehicle));
             driver = new DriverRig(playerRig, art, true, Vehicle.paint, Vehicle);
             driver.SetPaint(art.Paints[PaintIndex]);

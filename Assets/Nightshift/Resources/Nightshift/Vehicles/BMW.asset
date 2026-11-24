@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 60b6d1fdb48e8801c1bcf4187bce45b7, type: 3}
-  m_Name: BMW M4 Competition
+  m_Name: BMW M4 Competition F82
   m_EditorClassIdentifier:
   id: "m4"
   maker: "BMW"
-  model: "M4 Competition"
+  model: "M4 Competition F82"
   description: "The largest nitro reserve. Use longer bursts and agile line changes to stay ahead."
   resourceName: "BMW"
   paint: 2

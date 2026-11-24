@@ -95,12 +95,18 @@ namespace Nightshift.EditorTools
                 Require(model != null && model.GetComponentsInChildren<Renderer>(true).Length > 0,
                     $"No imported renderers for {car.DisplayName}.");
                 var details = Resources.Load<GameObject>("Nightshift/VehicleDetails/" + car.resourceName);
-                var lens = car.resourceName == "MercedesAMG" ? model
-                    : Resources.Load<GameObject>("Nightshift/VehicleLamps/" + car.resourceName);
-                Require(lens != null, $"Missing headlamp modules for {car.DisplayName}.");
+                var lens = Resources.Load<GameObject>("Nightshift/VehicleLamps/" + car.resourceName);
+                var lampRenderers = (lens != null ? lens : model).GetComponentsInChildren<Renderer>(true);
                 foreach (string side in new[] { "L", "R" })
-                    Require(lens.GetComponentsInChildren<Renderer>(true).Count(r => r.name == "Headlamp Emitter " + side) == 1,
+                {
+                    Require(lampRenderers.Count(r => r.name == "Headlamp Emitter " + side) == 1,
                         $"Expected one {side} headlamp emitter on {car.DisplayName}.");
+                    if (car.resourceName == "FordGT" || car.resourceName == "BMW" || car.resourceName == "Lamborghini")
+                        Require(lampRenderers.Count(r => r.name == "Taillamp Emitter " + side) == 1,
+                            $"Expected one {side} taillamp emitter on {car.DisplayName}.");
+                }
+                if (car.resourceName == "Lamborghini")
+                    Require(lampRenderers.Any(r => r.name == "Corrected Trim"), "Missing Aventador trim.");
                 var parts = model.GetComponentsInChildren<Transform>(true).AsEnumerable();
                 if (details != null) parts = parts.Concat(details.GetComponentsInChildren<Transform>(true));
                 foreach (string wheel in new[] { "wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr" })

@@ -91,7 +91,7 @@ namespace Nightshift
             {
                 var instance = UnityEngine.Object.Instantiate(details, car);
                 instance.transform.localPosition = Vector3.zero;
-                bool separateWheels = name == "BMW" || name == "Porsche" || name == "Bugatti" || name == "Lamborghini";
+                bool separateWheels = name == "Porsche" || name == "Bugatti" || name == "Lamborghini";
                 if (separateWheels)
                     foreach (var renderer in original)
                     {
@@ -107,9 +107,19 @@ namespace Nightshift
                 var module = UnityEngine.Object.Instantiate(lenses, car);
                 module.transform.localPosition = Vector3.zero;
             }
+            bool hasCorrectedTrim = FindPart(car, "Corrected Trim") != null;
+            bool hasFittedTaillights = FindPart(car, "Taillamp Emitter L") != null;
+            foreach (var renderer in original)
+            {
+                if (hasCorrectedTrim && renderer.name == "Trim")
+                    renderer.enabled = false;
+                if (hasFittedTaillights && renderer.name == "Taillights")
+                    renderer.enabled = false;
+            }
             foreach (var renderer in car.GetComponentsInChildren<Renderer>(true))
             {
-                if (renderer.name.StartsWith("Detail Head", StringComparison.OrdinalIgnoreCase))
+                if (renderer.name.StartsWith("Detail Head", StringComparison.OrdinalIgnoreCase)
+                    || (hasFittedTaillights && renderer.name.StartsWith("Detail Tail", StringComparison.OrdinalIgnoreCase)))
                     renderer.enabled = false;
             }
 
@@ -137,13 +147,20 @@ namespace Nightshift
                 if (part == "body" || part == "paint" || part.StartsWith("paint ", StringComparison.Ordinal)) paintwork.Add(renderer);
                 else if (part == "glass") renderer.sharedMaterial = art.Glass;
                 else if (part == "lights_red" || part == "taillights" || part.StartsWith("detail tail", StringComparison.Ordinal)
+                    || part.StartsWith("taillamp emitter", StringComparison.Ordinal)
                     || (name == "Car" && part == "brakes"))
                 {
                     renderer.sharedMaterial = player ? art.PlayerTaillight : art.TrafficTaillight;
                     if (player) tailLights.Add(renderer);
                 }
-                else if (part.StartsWith("headlamp emitter", StringComparison.Ordinal) || part.EndsWith("dipped projector", StringComparison.Ordinal))
+                else if (part.StartsWith("headlamp emitter", StringComparison.Ordinal)
+                    || part.StartsWith("dipped projector", StringComparison.Ordinal)
+                    || part.EndsWith("dipped projector", StringComparison.Ordinal))
+                {
                     renderer.sharedMaterial = player ? art.PlayerHeadlight : art.TrafficHeadlight;
+                    if (name == "BMW" && part.StartsWith("headlamp emitter", StringComparison.Ordinal))
+                        SetColor(renderer, "_EmissionColor", new Color(1.85f, 1.36f, .38f));
+                }
                 else if (part == "headlights" || part == "lights")
                     renderer.sharedMaterial = art.VehicleTrim;
                 else if (part == "rim" || part.StartsWith("rim_", StringComparison.Ordinal)
@@ -151,7 +168,7 @@ namespace Nightshift
                     renderer.sharedMaterial = art.Metal;
                 else if (part.StartsWith("detail rubber", StringComparison.Ordinal) || part == "detail fixed wheel")
                     renderer.sharedMaterial = art.Rubber;
-                else if (part == "trim" || part == "detail fixed metal")
+                else if (part == "trim" || part == "corrected trim" || part == "detail fixed metal")
                     renderer.sharedMaterial = art.VehicleTrim;
             }
             SetPaint(art.Paints[palette % art.Paints.Length]);
